@@ -11,7 +11,7 @@ import { UtilsService } from '../services/UtilsService';
 import { FileUtils } from '../utils/fileUtils';
 import { NuxtComponentInfo } from '../types';
 
-export class NuxtIntellisense implements vscode.CodeLensProvider {
+export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposable {
     private nuxtProjectRoot: string | null = null;
     private autoImportCache: Map<string, NuxtComponentInfo[]> = new Map();
     private lastCacheUpdate: number = 0;
@@ -33,13 +33,13 @@ export class NuxtIntellisense implements vscode.CodeLensProvider {
 
     private initializeServices() {
         if (this.nuxtProjectRoot) {
-            this.componentService = new ComponentService(this.autoImportCache, this.nuxtProjectRoot);
-            this.composableService = new ComposableService(this.autoImportCache);
+            this.componentService = new ComponentService(this.nuxtProjectRoot);
+            this.composableService = new ComposableService();
             this.pluginService = new PluginService();
             this.middlewareService = new MiddlewareService();
             this.layoutService = new LayoutService();
             this.storeService = new StoreService(this.autoImportCache);
-            this.utilsService = new UtilsService(this.autoImportCache, this.nuxtProjectRoot);
+            this.utilsService = new UtilsService(this.nuxtProjectRoot);
         }
     }
 
@@ -157,22 +157,19 @@ export class NuxtIntellisense implements vscode.CodeLensProvider {
 
         const fileExtension = path.extname(document.fileName);
 
+        const segments = fileDir.split(path.sep);
+
+        const hasSegment = (...names: string[]) => segments.some(segment => names.includes(segment));
+
         return {
             isVueFile: fileExtension === '.vue',
-            isComponent: fileDir.includes('components'),
-            isComposable: fileDir.includes('composables'),
-            isPlugin: fileDir.includes('plugins'),
-            isMiddleware: fileDir.includes('middleware'),
-            isLayout: fileDir.includes('layouts'),
-            isStore: fileDir.includes('stores') || fileDir.includes('store'),
-            isUtil: fileDir.includes('utils') ||
-                fileDir.includes('lib') ||
-                fileDir.includes('services') ||
-                fileDir.includes('types') ||
-                fileDir.includes('helpers') ||
-                fileDir.includes('constants') ||
-                fileDir.includes('schemas') ||
-                fileDir.includes('validationSchemas')
+            isComponent: hasSegment('components'),
+            isComposable: hasSegment('composables'),
+            isPlugin: hasSegment('plugins'),
+            isMiddleware: hasSegment('middleware'),
+            isLayout: hasSegment('layouts'),
+            isStore: hasSegment('stores', 'store'),
+            isUtil: hasSegment('utils', 'lib', 'services', 'types', 'helpers', 'constants', 'schemas', 'validationSchemas')
         };
     }
 
@@ -215,22 +212,6 @@ export class NuxtIntellisense implements vscode.CodeLensProvider {
             return;
         }
 
-        if (fileInfo.isComponent && this.componentService) {
-            const componentDirs = await FileUtils.findAllDirsByName(this.nuxtProjectRoot!, 'components');
-
-            for (const dir of componentDirs) {
-                await this.componentService.scanComponentsDirectory(dir);
-            }
-        }
-
-        if (fileInfo.isComposable && this.composableService) {
-            const composablesDirs = await FileUtils.findAllDirsByName(this.nuxtProjectRoot!, 'composables');
-
-            for (const dir of composablesDirs) {
-                await this.composableService.scanComposablesDirectory(dir);
-            }
-        }
-
         if (fileInfo.isStore && this.storeService) {
             const storeDirs = await FileUtils.findAllDirsByName(this.nuxtProjectRoot!, 'stores');
 
@@ -239,10 +220,18 @@ export class NuxtIntellisense implements vscode.CodeLensProvider {
             }
         }
 
-        if (fileInfo.isUtil && this.utilsService) {
-            await this.utilsService.scanUtilsDirectories();
-        }
-
         this.lastCacheUpdate = now;
+    }
+
+    /**
+     * Libère les watchers et caches détenus par chaque service
+     */
+    public dispose(): void {
+        this.componentService?.dispose();
+        this.composableService?.dispose();
+        this.pluginService?.dispose();
+        this.middlewareService?.dispose();
+        this.layoutService?.dispose();
+        this.storeService?.dispose();
     }
 }

@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PathUtils } from '../utils/pathUtils';
-import { NuxtComponentInfo } from '../types';
 
 interface ReferenceCache {
     references: vscode.Location[];
@@ -24,7 +23,6 @@ export class ComponentService {
     private initialized: boolean = false;
 
     constructor(
-        private autoImportCache: Map<string, NuxtComponentInfo[]>,
         private nuxtProjectRoot: string
     ) {
     }
@@ -513,31 +511,6 @@ export class ComponentService {
             .join('');
 
         return result;
-    }
-
-    async scanComponentsDirectory(dir: string): Promise<void> {
-        if (!fs.existsSync(dir)) {
-            return;
-        }
-
-        const componentInfos: NuxtComponentInfo[] = [];
-
-        const files = await vscode.workspace.findFiles(
-            '**/*.vue',
-            '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**,**/utils/**,**/lib/**,**/helpers/**,**/constants/**,**/shared/**, **/public/**,**/config/**, **/assets/**}',
-        );
-
-        for (const file of files) {
-            const componentName = path.basename(file.fsPath, '.vue');
-
-            componentInfos.push({
-                name: componentName,
-                path: file.fsPath,
-                isAutoImported: true
-            });
-        }
-
-        this.autoImportCache.set('components', componentInfos);
     }
 
     /**

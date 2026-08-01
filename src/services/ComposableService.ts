@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { TextUtils } from '../utils/textUtils';
-import type { NuxtComponentInfo } from '../types';
 
 interface ReferenceCache {
     references: vscode.Location[];
@@ -22,7 +21,7 @@ export class ComposableService {
     private fileWatcher: vscode.FileSystemWatcher | undefined;
     private exposedItemsCache: Map<string, ExposedItem[]> = new Map();
 
-    constructor(private autoImportCache: Map<string, NuxtComponentInfo[]>) {
+    constructor() {
         this.setupFileWatcher();
     }
 
@@ -487,50 +486,6 @@ export class ComposableService {
         } catch (e) {
             return [];
         }
-    }
-
-    async scanComposablesDirectory(dir: string): Promise<void> {
-        if (!fs.existsSync(dir)) {
-            return;
-        }
-
-        const composableInfos: NuxtComponentInfo[] = [];
-
-        const files = await vscode.workspace.findFiles(
-            path.join(dir, '**/*.{ts,js}').replace(/\\/g, '/'),
-            '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**, **/utils/**,**/lib/**,**/helpers/**,**/constants/**,**/shared/**, **/public/**,**/config/**, **/assets/**}'
-        );
-
-        for (const file of files) {
-            try {
-                const content = fs.readFileSync(file.fsPath, 'utf-8');
-
-                if (content.includes('defineStore')) {
-                    continue;
-                }
-
-                const exportRegex = /export\s+(default\s+)?(const|function|async\s+function)\s+(\w+)/g;
-
-                let match: RegExpExecArray | null;
-
-                while ((match = exportRegex.exec(content))) {
-                    const name = match[2];
-
-                    composableInfos.push({
-                        name: name,
-                        path: file.fsPath,
-                        isAutoImported: true
-                    });
-                }
-            } catch (e) {
-            }
-        }
-
-        this.autoImportCache.set('composables', composableInfos);
-
-        // Invalider le cache des références lorsque les composables changent
-        this.invalidateReferenceCache();
-        this.exposedItemsCache.clear();
     }
 
     // Méthode pour invalider le cache pour les tests ou un rafraîchissement manuel

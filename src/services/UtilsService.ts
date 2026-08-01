@@ -1,14 +1,10 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
-import { FileUtils } from '../utils/fileUtils';
 import { PathUtils } from '../utils/pathUtils';
 import { TextUtils } from '../utils/textUtils';
-import * as path from 'path';
-import type { NuxtComponentInfo } from '../types';
 
 export class UtilsService {
     constructor(
-        private autoImportCache: Map<string, NuxtComponentInfo[]>,
         private nuxtProjectRoot: string
     ) { }
 
@@ -164,54 +160,4 @@ export class UtilsService {
         }
     }
 
-    async scanUtilsDirectories(): Promise<void> {
-        const utilsDirNames = ['utils', 'helpers', 'lib', 'constants', 'schemas', 'validationSchemas'];
-
-        const utilsInfos: NuxtComponentInfo[] = [];
-
-        for (const dirName of utilsDirNames) {
-            const dirs = await FileUtils.findAllDirsByName(this.nuxtProjectRoot, dirName);
-
-            for (const dir of dirs) {
-                if (!fs.existsSync(dir)) continue;
-
-                const relativePattern = new vscode.RelativePattern(dir, '**/*.{ts,js}');
-
-                const files = await vscode.workspace.findFiles(relativePattern);
-
-                for (const file of files) {
-                    try {
-                        const content = fs.readFileSync(file.fsPath, 'utf-8');
-
-                        // Éviter de scanner les fichiers qui contiennent des définitions de store ou de composables
-                        if (content.includes('defineStore') ||
-                            file.fsPath.includes(path.sep + 'composables' + path.sep) ||
-                            file.fsPath.includes(path.sep + 'stores' + path.sep)) {
-                            continue;
-                        }
-
-                        // Détecter les exports
-                        const exportRegex = /export\s+(const|function|async function|interface|type|enum|class)\s+(\w+)/g;
-                        let match: RegExpExecArray | null;
-
-                        while ((match = exportRegex.exec(content))) {
-                            const exportType = match[1];
-                            const name = match[2];
-
-                            utilsInfos.push({
-                                name: name,
-                                path: file.fsPath,
-                                isAutoImported: false, // Les utilitaires ne sont généralement pas auto-importés par défaut
-                                exportType: exportType // Stocker le type d'export pour différencier
-                            });
-                        }
-                    } catch (e) {
-                        console.error(`Error scanning utils file ${file.fsPath}:`, e);
-                    }
-                }
-            }
-        }
-
-        this.autoImportCache.set('utils', utilsInfos);
-    }
 }

@@ -30,6 +30,35 @@ export class TextUtils {
         }
     }
 
+    /**
+     * Heuristique : détermine si l'index donné se trouve à l'intérieur d'une chaîne
+     * de caractères ('...', "...", `...`) en comptant les guillemets non échappés
+     * depuis le début de la ligne contenant cet index.
+     */
+    static isInsideStringLiteral(content: string, index: number): boolean {
+        const lineStart = content.lastIndexOf('\n', index - 1) + 1;
+        const before = content.slice(lineStart, index);
+
+        let inSingle = false;
+        let inDouble = false;
+        let inBacktick = false;
+
+        for (let i = 0; i < before.length; i++) {
+            if (before[i] === '\\') {
+                i++; // ignorer le caractère échappé
+                continue;
+            }
+
+            const char = before[i];
+
+            if (char === "'" && !inDouble && !inBacktick) inSingle = !inSingle;
+            else if (char === '"' && !inSingle && !inBacktick) inDouble = !inDouble;
+            else if (char === '`' && !inSingle && !inDouble) inBacktick = !inBacktick;
+        }
+
+        return inSingle || inDouble || inBacktick;
+    }
+
     static removeDuplicateReferences(references: vscode.Location[]): vscode.Location[] {
         const uniqueRefs: vscode.Location[] = [];
         const seen = new Set<string>();

@@ -12,7 +12,8 @@ export async function activate(context: vscode.ExtensionContext) {
         { language: 'javascript' }
       ],
       codeLensProvider
-    )
+    ),
+    codeLensProvider
   );
 
   const disposableCommands = [
