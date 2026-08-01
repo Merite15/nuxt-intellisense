@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.2] - 2026-08-01
+
+### Security
+
+- Forced `uuid` to `>=11.1.1` (resolved to `14.0.1`) via a `pnpm-workspace.yaml` override, fixing the last remaining moderate-severity advisory (out-of-bounds buffer writes in `v3()`/`v5()`/`v6()` when called with an explicit output buffer) nested inside `@vscode/vsce > @azure/identity > @azure/msal-node`. `uuid@14` is ESM-only, which could in principle break a CommonJS `require('uuid')` — verified this doesn't affect `vsce package` or loading `@azure/msal-node` in practice, since the only code path that actually invokes `uuid` there is `vsce`'s optional Azure AD login/publish flow, unused by this project. `pnpm audit` now reports zero known vulnerabilities.
+
 ## [0.8.1] - 2026-08-01
 
 ### Fixed
@@ -14,7 +20,7 @@ All notable changes to this project will be documented in this file.
 
 ### Security
 
-- Upgraded `@vscode/vsce` (2.32.0 → 3.9.2) and `mocha` (10.8.2 → 11.7.6), and removed the unused `glob`/`@types/glob` devDependencies, resolving 50 of 51 known vulnerabilities in transitive dev dependencies (`form-data`, `tar-fs`, `minimatch`, `brace-expansion`, `js-yaml`, `undici`, `jws`, `serialize-javascript`, `qs`, `diff`, `tmp`, `picomatch`, `underscore`, `linkify-it`, ...), via `pnpm-workspace.yaml` overrides where the upstream packages hadn't bumped their own dependency yet. One moderate-severity finding (`uuid`, nested inside `@vscode/vsce > @azure/identity > @azure/msal-node`) is intentionally left as-is: fixing it requires a major version jump of `uuid` that this codebase doesn't control the call site of, and the package is only exercised by the optional `vsce publish`/login flow, not `vsce package`.
+- Upgraded `@vscode/vsce` (2.32.0 → 3.9.2) and `mocha` (10.8.2 → 11.7.6), and removed the unused `glob`/`@types/glob` devDependencies, resolving 50 of 51 known vulnerabilities in transitive dev dependencies (`form-data`, `tar-fs`, `minimatch`, `brace-expansion`, `js-yaml`, `undici`, `jws`, `serialize-javascript`, `qs`, `diff`, `tmp`, `picomatch`, `underscore`, `linkify-it`, ...), via `pnpm-workspace.yaml` overrides where the upstream packages hadn't bumped their own dependency yet. The last one (`uuid`) is fixed in 0.8.2.
 - **None of these packages are runtime dependencies of the extension** — they're devDependencies used only to build/test/package it locally, and `node_modules` is already excluded from the published `.vsix` via `.vscodeignore`. This is a supply-chain/dev-environment hardening, not a fix for anything reachable by end users.
 
 ### Changed
