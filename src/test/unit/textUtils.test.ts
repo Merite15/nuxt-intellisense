@@ -50,6 +50,39 @@ describe('TextUtils', () => {
         });
     });
 
+    describe('extractBalancedBlock', () => {
+        it('extracts a flat object', () => {
+            const content = "definePageMeta({ middleware: 'auth' })";
+            const openIndex = content.indexOf('{');
+            assert.strictEqual(TextUtils.extractBalancedBlock(content, openIndex), "{ middleware: 'auth' }");
+        });
+
+        it('extracts the full block even when it contains nested objects', () => {
+            const content = `definePageMeta({
+    layout: {
+        name: 'dashboard',
+        props: { title: 'Dashboard' }
+    },
+    middleware: 'has-company'
+})`;
+            const openIndex = content.indexOf('{');
+            const block = TextUtils.extractBalancedBlock(content, openIndex);
+
+            assert.ok(block);
+            assert.ok(block!.includes("middleware: 'has-company'"), 'the block should extend past the nested layout object');
+        });
+
+        it('returns null when the index does not point at an opening brace', () => {
+            const content = 'not a brace';
+            assert.strictEqual(TextUtils.extractBalancedBlock(content, 0), null);
+        });
+
+        it('returns null for an unbalanced block', () => {
+            const content = '{ unterminated: true';
+            assert.strictEqual(TextUtils.extractBalancedBlock(content, 0), null);
+        });
+    });
+
     describe('removeDuplicateReferences', () => {
         it('removes references pointing to the exact same location', () => {
             const uri = Uri.file('/project/pages/index.vue');

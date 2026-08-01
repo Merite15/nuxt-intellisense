@@ -99,5 +99,25 @@ describe('FileUtils', () => {
             const root = FileUtils.findNuxtProjectRoot(path.join(nested, 'index.vue'));
             assert.strictEqual(root, layerDir);
         });
+
+        it('prefers the outermost project root over a nested local layer that also has its own nuxt.config.ts + package.json', () => {
+            // Structure type "modular monolith" : monorepo/ est la vraie racine, mais
+            // monorepo/layers/blog/ est un layer local avec son propre nuxt.config.ts
+            // ET son propre package.json (courant pour des layers publiables/isolés).
+            fs.writeFileSync(path.join(tmpDir, 'nuxt.config.ts'), '');
+            fs.writeFileSync(path.join(tmpDir, 'package.json'), '{}');
+            fs.mkdirSync(path.join(tmpDir, '.git'));
+
+            const layerDir = path.join(tmpDir, 'layers', 'blog');
+            fs.mkdirSync(layerDir, { recursive: true });
+            fs.writeFileSync(path.join(layerDir, 'nuxt.config.ts'), '');
+            fs.writeFileSync(path.join(layerDir, 'package.json'), '{}');
+
+            const nested = path.join(layerDir, 'pages');
+            fs.mkdirSync(nested);
+
+            const root = FileUtils.findNuxtProjectRoot(path.join(nested, 'index.vue'));
+            assert.strictEqual(root, tmpDir);
+        });
     });
 });

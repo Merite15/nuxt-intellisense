@@ -20,7 +20,8 @@ const CATEGORIES: CategoryDefinition[] = [
     { label: 'Middleware', icon: 'link', include: '**/middleware/**/*.{ts,js}' },
     { label: 'Layouts', icon: 'layout', include: '**/layouts/**/*.vue' },
     { label: 'Server API', icon: 'server', include: '**/server/{api,routes}/**/*.{ts,js}', baseExcludeOnly: true },
-    { label: 'Utils', icon: 'tools', include: '**/{utils,lib,helpers,constants}/**/*.{ts,js}', baseExcludeOnly: true }
+    { label: 'Utils', icon: 'tools', include: '**/{utils,lib,helpers,constants}/**/*.{ts,js}', baseExcludeOnly: true },
+    { label: 'Tests', icon: 'beaker', include: '**/*.{test,spec}.{ts,js}', baseExcludeOnly: true }
 ];
 
 type NuxtExplorerItem =

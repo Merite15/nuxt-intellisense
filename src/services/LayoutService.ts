@@ -118,6 +118,7 @@ export class LayoutService {
             try {
                 const content = fs.readFileSync(uri.fsPath, 'utf-8');
 
+                // Forme simple : layout: 'name'
                 const regex = new RegExp(`layout\\s*:\\s*(['"\`])${layoutName}\\1`, 'g');
 
                 let match;
@@ -134,6 +135,36 @@ export class LayoutService {
                             new vscode.Position(end.line, end.character)
                         )
                     ));
+                }
+
+                // Forme objet : layout: { name: 'name', props: { ... } }
+                const objectLayoutStartRegex = /layout\s*:\s*\{/g;
+                let objectMatch;
+
+                while ((objectMatch = objectLayoutStartRegex.exec(content)) !== null) {
+                    const braceOpenIndex = objectMatch.index + objectMatch[0].length - 1;
+                    const layoutBlock = TextUtils.extractBalancedBlock(content, braceOpenIndex);
+
+                    if (!layoutBlock) {
+                        continue;
+                    }
+
+                    const nameRegex = new RegExp(`name\\s*:\\s*(['"\`])${layoutName}\\1`, 'g');
+                    const nameMatch = nameRegex.exec(layoutBlock);
+
+                    if (nameMatch) {
+                        const exactIndex = braceOpenIndex + nameMatch.index;
+                        const start = TextUtils.indexToPosition(content, exactIndex);
+                        const end = TextUtils.indexToPosition(content, exactIndex + nameMatch[0].length);
+
+                        results.push(new vscode.Location(
+                            uri,
+                            new vscode.Range(
+                                new vscode.Position(start.line, start.character),
+                                new vscode.Position(end.line, end.character)
+                            )
+                        ));
+                    }
                 }
             } catch (e) {
                 continue;

@@ -31,11 +31,15 @@ export class PathUtils {
         } else if (importPath.startsWith('~/') || importPath.startsWith('@/')) {
             const aliasPath = importPath.substring(2);
 
-            const resolvedPath = path.join(nuxtProjectRoot!, aliasPath);
+            // Nuxt 3 résout ~/ et @/ depuis la racine du projet ; Nuxt 4 les résout
+            // depuis app/ (nouveau srcDir par défaut). On essaie les deux.
+            const candidateBases = [nuxtProjectRoot!, path.join(nuxtProjectRoot!, 'app')];
 
-            const resolvedWithExt = this.resolveWithExtension(resolvedPath);
-
-            return resolvedWithExt === targetFile;
+            return candidateBases.some(base => {
+                const resolvedPath = path.join(base, aliasPath);
+                const resolvedWithExt = this.resolveWithExtension(resolvedPath);
+                return resolvedWithExt === targetFile;
+            });
         }
         return false;
     }

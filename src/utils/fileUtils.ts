@@ -99,6 +99,12 @@ export class FileUtils {
 
     /**
      * Recherche la racine d'un projet Nuxt en remontant depuis un chemin donné.
+     *
+     * Remonte jusqu'à la racine du système de fichiers et retient le dossier "certain"
+     * (nuxt.config + package.json/.git/pnpm-workspace.yaml) le plus externe rencontré,
+     * plutôt que le premier trouvé. Un layer local imbriqué (ex: layers/blog/) a
+     * souvent son propre nuxt.config.ts et parfois son propre package.json ; s'arrêter
+     * au premier candidat trouverait le layer au lieu de la vraie racine du monorepo.
      */
     static findNuxtProjectRoot(startPath: string): string | null {
         let currentDir = fs.statSync(startPath, { throwIfNoEntry: false })?.isDirectory()
@@ -107,6 +113,7 @@ export class FileUtils {
 
         const root = path.parse(currentDir).root;
         let bestCandidate: string | null = null;
+        let certainRoot: string | null = null;
 
         while (currentDir !== root) {
             const hasNuxtConfig = fs.existsSync(path.join(currentDir, 'nuxt.config.ts')) ||
@@ -117,15 +124,15 @@ export class FileUtils {
 
             if (hasNuxtConfig) {
                 if (hasPackageJson || hasGit || hasPnpmWorkspace) {
-                    return currentDir;
+                    certainRoot = currentDir;
+                } else {
+                    bestCandidate = currentDir;
                 }
-
-                bestCandidate = currentDir;
             }
 
             currentDir = path.dirname(currentDir);
         }
 
-        return bestCandidate;
+        return certainRoot ?? bestCandidate;
     }
 }

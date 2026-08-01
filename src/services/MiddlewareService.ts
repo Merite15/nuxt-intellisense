@@ -92,7 +92,81 @@ export class MiddlewareService {
 
         await this.findNuxtConfigReferences(middlewareName, results);
 
+        await this.findRouteRulesReferences(middlewareName, results);
+
         return results;
+    }
+
+    /**
+     * Recherche les usages via `appMiddleware` dans un objet `routeRules` (Nitro),
+     * que celui-ci soit défini directement dans nuxt.config ou dans un fichier séparé
+     * (ex: app/config/route-rules.config.ts) importé ensuite dans la config. On scanne
+     * donc tout le projet, sans exclure les dossiers habituellement ignorés (comme
+     * `config/`), puisque ce pattern peut légitimement vivre là.
+     */
+    private async findRouteRulesReferences(middlewareName: string, results: vscode.Location[]): Promise<void> {
+        const uris = await vscode.workspace.findFiles(
+            '**/*.{ts,js}',
+            FileUtils.buildBaseExcludeGlob()
+        );
+
+        const singleRegex = new RegExp(`appMiddleware\\s*:\\s*(['"\`])(${middlewareName})\\1`, 'g');
+        const arrayRegex = /appMiddleware\s*:\s*\[([^\]]*)\]/g;
+
+        for (const uri of uris) {
+            let content: string;
+            try {
+                content = fs.readFileSync(uri.fsPath, 'utf-8');
+            } catch (e) {
+                continue;
+            }
+
+            singleRegex.lastIndex = 0;
+            let singleMatch;
+
+            while ((singleMatch = singleRegex.exec(content)) !== null) {
+                const valueIndex = content.indexOf(
+                    singleMatch[1] + middlewareName + singleMatch[1],
+                    singleMatch.index
+                ) + 1;
+
+                const start = TextUtils.indexToPosition(content, valueIndex);
+                const end = TextUtils.indexToPosition(content, valueIndex + middlewareName.length);
+
+                results.push(new vscode.Location(
+                    uri,
+                    new vscode.Range(
+                        new vscode.Position(start.line, start.character),
+                        new vscode.Position(end.line, end.character)
+                    )
+                ));
+            }
+
+            arrayRegex.lastIndex = 0;
+            let arrayMatch;
+
+            while ((arrayMatch = arrayRegex.exec(content)) !== null) {
+                const arrayContent = arrayMatch[1];
+                const itemRegex = new RegExp(`(['"\`])(${middlewareName})\\1`, 'g');
+                let itemMatch;
+
+                while ((itemMatch = itemRegex.exec(arrayContent)) !== null) {
+                    const arrayStartIndex = arrayMatch.index + arrayMatch[0].indexOf(arrayContent);
+                    const exactIndex = arrayStartIndex + itemMatch.index + 1;
+
+                    const start = TextUtils.indexToPosition(content, exactIndex);
+                    const end = TextUtils.indexToPosition(content, exactIndex + middlewareName.length);
+
+                    results.push(new vscode.Location(
+                        uri,
+                        new vscode.Range(
+                            new vscode.Position(start.line, start.character),
+                            new vscode.Position(end.line, end.character)
+                        )
+                    ));
+                }
+            }
+        }
     }
 
     private async findVueFileReferences(middlewareName: string, results: vscode.Location[]): Promise<void> {
@@ -109,11 +183,16 @@ export class MiddlewareService {
                 continue;
             }
 
-            const definePageMetaRegex = /definePageMeta\s*\(\s*\{[^}]*\}/g;
+            const definePageMetaStartRegex = /definePageMeta\s*\(\s*\{/g;
             let metaMatch;
 
-            while ((metaMatch = definePageMetaRegex.exec(content)) !== null) {
-                const metaContent = metaMatch[0];
+            while ((metaMatch = definePageMetaStartRegex.exec(content)) !== null) {
+                const braceOpenIndex = metaMatch.index + metaMatch[0].length - 1;
+                const metaContent = TextUtils.extractBalancedBlock(content, braceOpenIndex);
+
+                if (!metaContent) {
+                    continue;
+                }
 
                 const metaStartIndex = metaMatch.index;
 

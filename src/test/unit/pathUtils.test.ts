@@ -83,7 +83,7 @@ describe('PathUtils', () => {
             assert.strictEqual(result, true);
         });
 
-        it('resolves an alias import (~/) to the target file', () => {
+        it('resolves an alias import (~/) to the target file (Nuxt 3 layout: root)', () => {
             const targetFile = path.join(tmpDir, 'utils', 'format.ts');
             fs.mkdirSync(path.dirname(targetFile));
             fs.writeFileSync(targetFile, '');
@@ -91,6 +91,17 @@ describe('PathUtils', () => {
             const importingFile = path.join(tmpDir, 'pages', 'index.vue');
 
             const result = PathUtils.isImportPointingToFile('~/utils/format', importingFile, targetFile, tmpDir);
+            assert.strictEqual(result, true);
+        });
+
+        it('resolves an alias import (@/) to the target file when srcDir is app/ (Nuxt 4 layout)', () => {
+            const targetFile = path.join(tmpDir, 'app', 'utils', 'format.ts');
+            fs.mkdirSync(path.dirname(targetFile), { recursive: true });
+            fs.writeFileSync(targetFile, '');
+
+            const importingFile = path.join(tmpDir, 'app', 'pages', 'index.vue');
+
+            const result = PathUtils.isImportPointingToFile('@/utils/format', importingFile, targetFile, tmpDir);
             assert.strictEqual(result, true);
         });
 

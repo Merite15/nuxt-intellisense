@@ -79,4 +79,34 @@ describe('ComponentService (integration)', () => {
         assert.ok(conflictLens, 'expected a duplicate-name warning lens');
         assert.match((conflictLens!.command as any).title, /"UiMyButton"/);
     });
+
+    it('counts a component usage inside app.vue', async () => {
+        const componentsDir = path.join(tmpDir, 'components');
+        fs.mkdirSync(componentsDir);
+        const componentFile = path.join(componentsDir, 'NetworkStatus.vue');
+        fs.writeFileSync(
+            componentFile,
+            `<script setup lang="ts">\n</script>\n<template><div>offline</div></template>\n`
+        );
+
+        fs.writeFileSync(
+            path.join(tmpDir, 'app.vue'),
+            `<template>
+  <NuxtLayout>
+    <ClientOnly>
+      <NetworkStatus />
+    </ClientOnly>
+    <NuxtPage />
+  </NuxtLayout>
+</template>
+`
+        );
+
+        const doc = makeDocument(componentFile);
+        const lenses = await service.provideCodeLenses(doc);
+
+        const mainLens = lenses.find(l => /\$\(package\)/.test((l.command as any)?.title ?? ''));
+        assert.ok(mainLens, 'expected a component usage lens');
+        assert.match((mainLens!.command as any).title, /1 reference/);
+    });
 });

@@ -399,11 +399,9 @@ export class ComponentService {
         for (let i = 0; i < uris.length; i += batchSize) {
             const batch = uris.slice(i, i + batchSize);
             const batchPromises = batch.map(async (uri) => {
-                if (path.basename(uri.fsPath) === 'app.vue' ||
-                    path.basename(uri.fsPath) === 'error.vue') {
-                    return;
-                }
-
+                // Note : app.vue/error.vue sont exclus des CodeLens (ce ne sont pas des
+                // composants réutilisables), mais ils DOIVENT rester scannés ici : ils
+                // utilisent fréquemment d'autres composants (<NuxtLayout>, <NetworkStatus />...).
                 let content: string;
                 try {
                     content = fs.readFileSync(uri.fsPath, 'utf-8');

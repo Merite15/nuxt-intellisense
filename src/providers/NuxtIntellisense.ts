@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
 import { ComponentService } from '../services/ComponentService';
 import { ComposableService } from '../services/ComposableService';
 import { PluginService } from '../services/PluginService';
@@ -55,7 +54,7 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
 
         // Trouver la racine du projet Nuxt si pas encore fait
         if (!this.nuxtProjectRoot) {
-            this.nuxtProjectRoot = await this.findNuxtProjectRoot(document.uri);
+            this.nuxtProjectRoot = FileUtils.findNuxtProjectRoot(document.uri.fsPath);
 
             this.initializeServices();
         }
@@ -235,38 +234,6 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
             isUtil: hasSegment('utils', 'lib', 'services', 'types', 'helpers', 'constants', 'schemas', 'validationSchemas')
         };
     }
-
-    private async findNuxtProjectRoot(uri: vscode.Uri): Promise<string | null> {
-        let currentDir = path.dirname(uri.fsPath);
-        const root = path.parse(currentDir).root;
-        let bestCandidate: string | null = null;
-
-        while (currentDir !== root) {
-            const nuxtConfigTsPath = path.join(currentDir, 'nuxt.config.ts');
-            const nuxtConfigJsPath = path.join(currentDir, 'nuxt.config.js');
-
-            const hasNuxtConfig = fs.existsSync(nuxtConfigTsPath) || fs.existsSync(nuxtConfigJsPath);
-            const hasPackageJson = fs.existsSync(path.join(currentDir, 'package.json'));
-            const hasGit = fs.existsSync(path.join(currentDir, '.git'));
-            const hasPnpmWorkspace = fs.existsSync(path.join(currentDir, 'pnpm-workspace.yaml'));
-
-            if (hasNuxtConfig) {
-                // On marque ce dossier comme un candidat potentiel
-                if (hasPackageJson || hasGit || hasPnpmWorkspace) {
-                    return currentDir; // Racine trouvée avec certitude
-                }
-
-                // Sinon on garde en mémoire comme fallback
-                bestCandidate = currentDir;
-            }
-
-            currentDir = path.dirname(currentDir);
-        }
-
-        // Si aucun dossier avec git/package.json mais un layer avec nuxt.config trouvé
-        return bestCandidate;
-    }
-
 
     private async updateAutoImportCacheIfNeeded(fileInfo: any): Promise<void> {
         const now = Date.now();

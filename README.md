@@ -1,6 +1,6 @@
 # 🔍 Nuxt Intellisense
 
-**A VS Code extension that revolutionizes your Nuxt 3 development experience** — real-time reference counts, dead-code detection and project navigation, right inside the editor.
+**A VS Code extension that revolutionizes your Nuxt 3 & 4 development experience** — real-time reference counts, dead-code detection and project navigation, right inside the editor.
 
 ## Table of Contents
 
@@ -37,14 +37,16 @@ code --install-extension MeriteK.nuxt-intellisense
 
 **Real-time reference count**, shown as a CodeLens above each definition, for:
 
-  - 🧩 Vue/Nuxt components (including custom components in the `pages` folder)
+  - 🧩 Vue/Nuxt components — including usages in `pages`, `app.vue`/`error.vue`, and both PascalCase/kebab-case tags
   - 🔄 Composables
   - 🗃️ Pinia stores (including individual methods, variables and getters)
-  - 🖼️ Layouts
+  - 🖼️ Layouts — both the plain string form (`layout: 'name'`) and the object form (`layout: { name, props }`)
   - 🔌 Plugins (including custom directives)
-  - 🔗 Middlewares
+  - 🔗 Middlewares — via `definePageMeta` (string or array), Nitro `routeRules`' `appMiddleware` (string or array, wherever that config file lives), and `.global.ts` files
   - 🌐 `server/api` and `server/routes` Nitro event handlers (including dynamic `[id]` segments and `.get`/`.post`/... method suffixes)
   - 🔧 Utility files such as `utils`, `lib`, `helpers`, `constants`, etc.
+
+Detection follows path **segments**, not a fixed root, so it works the same whether your project uses the Nuxt 3 layout (`components/`, `composables/`, ... at the root) or the Nuxt 4 layout (nested under `app/`), and inside local [Nuxt layers](https://nuxt.com/docs/4.x/getting-started/layers) (`layers/<name>/...`).
 
 ### 🩺 Code Health
 
@@ -53,13 +55,15 @@ code --install-extension MeriteK.nuxt-intellisense
 
 ### 🗂️ Nuxt Structure Explorer
 
-A collapsible **"Nuxt Structure"** section is added to the built-in VS Code **Explorer** panel (the file tree, not a separate sidebar icon). It lists your project's components, composables, stores, plugins, middleware, layouts, server API routes and utils by category, for quick navigation across a large codebase. Click the refresh icon in its title bar after adding new files to pick up changes.
+A collapsible **"Nuxt Structure"** section is added to the built-in VS Code **Explorer** panel (the file tree, not a separate sidebar icon). It lists your project's components, composables, stores, plugins, middleware, layouts, server API routes, utils and **unit/integration test files** (any `*.test.{ts,js}` / `*.spec.{ts,js}`) by category, for quick navigation across a large codebase. Click the refresh icon in its title bar after adding new files to pick up changes.
 
-### 🎯 Nuxt 3 Precision
+### 🎯 Nuxt 3 & 4 Precision
 
 - Detection of **auto-imports** across components and composables.
 - Support for **multi-line components** (components with multiple lines and dynamic usage).
 - Fully compatible with **TypeScript** and **JavaScript** for enhanced typing and error detection.
+- Works with both Nuxt 3's default layout and Nuxt 4's `app/`-nested layout, including `~/`/`@/` alias resolution against either `srcDir`.
+- Monorepo-aware: project root detection prefers the outermost `nuxt.config.ts` when a local layer also ships its own config, so working inside a layer doesn't lose the rest of the app.
 
 ### ⚡ Seamless Integration
 

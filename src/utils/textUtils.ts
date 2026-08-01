@@ -59,6 +59,33 @@ export class TextUtils {
         return inSingle || inDouble || inBacktick;
     }
 
+    /**
+     * Extrait le bloc `{...}` qui commence à `openBraceIndex` en gérant les accolades
+     * imbriquées (contrairement à une regex du type `\{[^}]*\}` qui s'arrête à la
+     * première accolade fermante rencontrée, même si elle appartient à un objet
+     * imbriqué comme `layout: { props: { ... } }`).
+     */
+    static extractBalancedBlock(content: string, openBraceIndex: number): string | null {
+        if (content[openBraceIndex] !== '{') {
+            return null;
+        }
+
+        let depth = 0;
+
+        for (let i = openBraceIndex; i < content.length; i++) {
+            if (content[i] === '{') {
+                depth++;
+            } else if (content[i] === '}') {
+                depth--;
+                if (depth === 0) {
+                    return content.slice(openBraceIndex, i + 1);
+                }
+            }
+        }
+
+        return null;
+    }
+
     static removeDuplicateReferences(references: vscode.Location[]): vscode.Location[] {
         const uniqueRefs: vscode.Location[] = [];
         const seen = new Set<string>();

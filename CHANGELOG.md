@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.1] - 2026-08-01
+
+### Fixed
+
+- Project root detection stopped at the first ancestor directory containing both `nuxt.config.ts` and `package.json`/`.git`. In a monorepo using local Nuxt layers (`layers/<name>/`) that ship their own `nuxt.config.ts` **and** `package.json`, opening a file inside a layer would incorrectly scope the whole extension to that layer instead of the actual project root. Root detection now prefers the outermost matching ancestor. The duplicate implementation of this logic (one in `NuxtIntellisense`, one in `FileUtils`) has also been consolidated into a single `FileUtils.findNuxtProjectRoot`.
+- `middleware`/`layout` usages declared in `definePageMeta({ ... })` were missed whenever an *earlier* property in the same object was itself a nested object (e.g. the newer `layout: { name, props }` form) — the regex used to isolate the `definePageMeta` object stopped at the first `}` it found, which belonged to the nested object, cutting off everything declared after it (including `middleware: '...'`). Parsing now walks balanced braces instead (new `TextUtils.extractBalancedBlock`). The object form of `layout` (`layout: { name: 'x', props: {...} }`) is also now detected, not just the plain string form.
+- Component usages inside `app.vue` and `error.vue` were never counted — these two files were explicitly skipped while scanning for component tags, even though `app.vue` routinely uses components (`<NuxtLayout>`, custom components, ...).
+- Middleware referenced via Nitro `routeRules`' `appMiddleware` (string or array form) was not detected at all, whether declared directly in `nuxt.config.ts` or in a separate file imported into it (e.g. `app/config/route-rules.config.ts`) — the search now covers this pattern project-wide, without excluding the normally-ignored `config/` folder for this specific case.
+
 ## [0.8.0] - 2026-08-01
 
 ### Added
@@ -10,7 +19,8 @@ All notable changes to this project will be documented in this file.
 - **Configurable ignored directories**: `nuxt-intellisense.ignoredDirectories` setting lets you customize which folders (`utils`, `lib`, `helpers`, ...) are excluded from reference search, instead of a fixed, hardcoded list.
 - **Duplicate component name detection**: warns when two different component files resolve to the same Nuxt component name (e.g. `components/ui/Button.vue` and `components/common/Button.vue` both resolving to `Button`), with a quick link to the conflicting files.
 - **`server/api` and `server/routes` reference counting**: detects `defineEventHandler`/`eventHandler` handlers, derives the Nitro route path (including dynamic `[id]` segments and `.get`/`.post`/... method suffixes), and counts usages via `$fetch`/`useFetch`/`useLazyFetch` across the project.
-- **"Nuxt Structure" explorer view**: a new panel in the Explorer sidebar listing components, composables, stores, plugins, middleware, layouts, server API routes and utils by category, for quick navigation. Refresh via the toolbar button or `nuxt-intellisense.refreshExplorer`.
+- **"Nuxt Structure" explorer view**: a new panel in the Explorer sidebar listing components, composables, stores, plugins, middleware, layouts, server API routes, utils and unit/integration test files (`*.test.{ts,js}` / `*.spec.{ts,js}`) by category, for quick navigation. Refresh via the toolbar button or `nuxt-intellisense.refreshExplorer`.
+- **Nuxt 4 compatibility**: `~/` and `@/` alias resolution now tries both the project root (Nuxt 3 default `srcDir`) and `app/` (Nuxt 4 default `srcDir`), so import-based reference detection keeps working after migrating to the new `app/`-nested directory layout.
 - Real codicons (`$(package)`, `$(database)`, `$(symbol-method)`, ...) instead of emoji in all CodeLens titles, for a native, theme-aware look.
 - Unit and integration test suite (`npm test`), running against a lightweight in-process mock of the `vscode` API — no need to download or launch a real VS Code instance.
 
