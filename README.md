@@ -1,19 +1,49 @@
 # 🔍 Nuxt Intellisense
 
-**An extension for VS Code that revolutionizes your Nuxt 3 development experience**
+**A VS Code extension that revolutionizes your Nuxt 3 development experience** — real-time reference counts, dead-code detection and project navigation, right inside the editor.
+
+## Table of Contents
+
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Key Features](#key-features)
+- [Settings](#settings)
+- [Commands](#commands)
+- [Troubleshooting](#troubleshooting)
+- [Development & Tests](#development--tests)
+- [License](#license)
+
+## 📋 Requirements
+
+- VS Code `1.60.0` or later.
+- A **folder** open in the workspace (not a single loose file) containing a `nuxt.config.js` or `nuxt.config.ts` — this is what triggers the extension's activation and lets it locate your project root.
+
+## 🚀 Installation
+
+1. Open VS Code.
+2. Go to the Extensions panel (`Ctrl+Shift+X` / `Cmd+Shift+X`).
+3. Search for **"Nuxt Intellisense"**.
+4. Click **Install**.
+
+Or from the command line:
+
+```bash
+code --install-extension MeriteK.nuxt-intellisense
+```
 
 ## ✨ Key Features
 
 ### 📊 Smart Visualization
 
-- **Real-time reference count** for:
+**Real-time reference count**, shown as a CodeLens above each definition, for:
+
   - 🧩 Vue/Nuxt components (including custom components in the `pages` folder)
   - 🔄 Composables
   - 🗃️ Pinia stores (including individual methods, variables and getters)
   - 🖼️ Layouts
   - 🔌 Plugins (including custom directives)
   - 🔗 Middlewares
-  - 🌐 `server/api` and `server/routes` Nitro event handlers (including dynamic `[id]` segments)
+  - 🌐 `server/api` and `server/routes` Nitro event handlers (including dynamic `[id]` segments and `.get`/`.post`/... method suffixes)
   - 🔧 Utility files such as `utils`, `lib`, `helpers`, `constants`, etc.
 
 ### 🩺 Code Health
@@ -23,7 +53,7 @@
 
 ### 🗂️ Nuxt Structure Explorer
 
-A dedicated panel in the VS Code Explorer sidebar lists your project's components, composables, stores, plugins, middleware, layouts, server API routes and utils by category, for quick navigation across a large codebase. Refresh it from its toolbar button after adding new files.
+A collapsible **"Nuxt Structure"** section is added to the built-in VS Code **Explorer** panel (the file tree, not a separate sidebar icon). It lists your project's components, composables, stores, plugins, middleware, layouts, server API routes and utils by category, for quick navigation across a large codebase. Click the refresh icon in its title bar after adding new files to pick up changes.
 
 ### 🎯 Nuxt 3 Precision
 
@@ -36,7 +66,7 @@ A dedicated panel in the VS Code Explorer sidebar lists your project's component
 - **Highlighting** within the source file to easily locate references.
 - **Quick navigation** to references by simply clicking on them.
 - **Real-time updates** as you modify your code, keeping everything synced.
-- Native VS Code **codicons** in every CodeLens, matching your current theme.
+- Native VS Code **codicons** in every CodeLens, matching your current theme (light/dark).
 
 ## ⚙️ Settings
 
@@ -46,46 +76,68 @@ A dedicated panel in the VS Code Explorer sidebar lists your project's component
 | `nuxt-intellisense.showUnusedWarnings` | `true` | Report symbols with 0 detected references as hints in the Problems panel. |
 | `nuxt-intellisense.ignoredDirectories` | `["utils","lib","helpers","constants","shared","public","config","assets"]` | Directory names excluded from component/composable/store reference search, on top of `node_modules`, `.nuxt`, `.output` and `dist` (always excluded). Adjust this if your project uses a different folder layout. |
 
+## 📟 Commands
+
+Available from the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
+
+| Command | Description |
+|---|---|
+| `Refresh Nuxt CodeLens` | Force VS Code to re-evaluate the CodeLenses in the active editor. |
+| `Show Nuxt Intellisense Documentation` | Opens this project's documentation. |
+| `Refresh Nuxt Explorer` | Re-scans the project and refreshes the "Nuxt Structure" panel (also available as a toolbar icon on the panel itself). |
+
 ## 🛠 Troubleshooting
 
 - If you encounter issues with the extension, try restarting VS Code after installation.
-- Ensure that your Nuxt project is correctly configured with the `nuxt.config.js`/`nuxt.config.ts` file for the extension to recognize auto-imports.
-- Reference counts are cached for a few minutes for performance; editing a file invalidates its own cache immediately. Use the `Nuxt Intellisense: Refresh Nuxt CodeLens` command if you ever see a stale count.
+- Ensure that your Nuxt project is correctly configured with a `nuxt.config.js`/`nuxt.config.ts` file **at or above** the folder you have open, so the extension can locate your project root and recognize auto-imports.
+- The "Nuxt Structure" panel only appears when a folder (not a single file) is open in the workspace and a `nuxt.config.js`/`.ts` is found.
+- Reference counts are cached for a few minutes for performance; editing a file invalidates its own cache immediately. Use the `Refresh Nuxt CodeLens` command if you ever see a stale count.
 
-## 🖥 Screenshot
+## 🖥 Screenshots
 
 ![Demo](./images/demo/1.png)
 ![Demo](./images/demo/2.png)
 _Visual representation of component and composable references in action._
 
-## 🚀 Installation
+## 💡 Practical Example
 
-1. Open VS Code
-2. Go to the Extensions panel (Ctrl+Shift+X)
-3. Search for "Nuxt Intellisense"
-4. Click Install
+Given a composable:
 
-## 💡 Practical Examples
-
-```vue
-<!-- 5 usages detected for the composable -->
-export const useData() { }
-
-<!-- 3 usages detected for the components -->
-<script setup>
-const { data } = useData()  <!-- Composable -->
-</script>
-
-<template></template>
+```ts
+// composables/useData.ts
+export function useData() {
+  const items = ref([])
+  return { items }
+}
 ```
+
+...used in three different places, the extension shows the count directly above the definition:
+
+```ts
+// $(sync) 3 references
+export function useData() {
+  const items = ref([])
+  return { items }
+}
+```
+
+Clicking the CodeLens opens the standard "Find References" view with all three usage locations.
 
 ## 🧪 Development & Tests
 
 ```bash
 npm install
 npm run compile   # Build the extension (out/)
-npm test          # Run the unit/integration test suite
 npm run watch      # Rebuild on change while developing
+npm test          # Run the unit/integration test suite
+npm run package    # Produce a distributable .vsix
 ```
 
-The test suite runs against a lightweight in-process mock of the `vscode` API (see `src/test/mocks/vscode.ts`), so it executes in milliseconds without downloading or launching a real VS Code instance. Tests live under `src/test/unit` (pure logic: path/text/file utilities) and `src/test/integration` (service-level behavior, including regression tests for previously fixed bugs).
+The test suite runs against a lightweight in-process mock of the `vscode` API (see `src/test/mocks/vscode.ts`), so it executes in milliseconds without downloading or launching a real VS Code instance.
+
+- `src/test/unit` — pure logic: path/text/file utilities.
+- `src/test/integration` — service-level behavior, including regression tests for previously fixed bugs.
+
+## 📄 License
+
+[MIT](./license.txt) © MeriteK
