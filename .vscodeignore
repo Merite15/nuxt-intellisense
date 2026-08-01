@@ -8,3 +8,6 @@ coverage/**
 *.ts
 README.md
 tsconfig.json
+.gitignore
+pnpm-lock.yaml
+pnpm-workspace.yaml

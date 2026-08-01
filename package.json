@@ -63,7 +63,16 @@
           "items": {
             "type": "string"
           },
-          "default": ["utils", "lib", "helpers", "constants", "shared", "public", "config", "assets"],
+          "default": [
+            "utils",
+            "lib",
+            "helpers",
+            "constants",
+            "shared",
+            "public",
+            "config",
+            "assets"
+          ],
           "description": "Directory names excluded from component/composable/store reference search (in addition to node_modules, .nuxt, .output and dist, which are always excluded)"
         }
       }
@@ -104,7 +113,8 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run clean && npm run compile",
+    "clean": "node -e \"require('fs').rmSync('out', { recursive: true, force: true })\"",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
@@ -114,14 +124,12 @@
     "publish": "vsce publish"
   },
   "devDependencies": {
-    "@types/glob": "^7.2.0",
-    "@types/mocha": "^9.1.1",
+    "@types/mocha": "^10.0.10",
     "@types/node": "16.x",
     "@types/vscode": "^1.60.0",
     "@vscode/test-electron": "^2.1.5",
-    "@vscode/vsce": "^2.22.0",
-    "glob": "^10.3.10",
-    "mocha": "^10.0.0",
+    "@vscode/vsce": "^3.9.2",
+    "mocha": "^11.7.6",
     "typescript": "^5.8.3"
   }
 }

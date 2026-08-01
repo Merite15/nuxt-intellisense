@@ -12,6 +12,15 @@ All notable changes to this project will be documented in this file.
 - Middleware referenced via Nitro `routeRules`' `appMiddleware` (string or array form) was not detected at all, whether declared directly in `nuxt.config.ts` or in a separate file imported into it (e.g. `app/config/route-rules.config.ts`) — the search now covers this pattern project-wide, without excluding the normally-ignored `config/` folder for this specific case.
 - Same fix applied to layouts referenced via `routeRules`' `appLayout` (Nuxt 3.21+/4.3+).
 
+### Security
+
+- Upgraded `@vscode/vsce` (2.32.0 → 3.9.2) and `mocha` (10.8.2 → 11.7.6), and removed the unused `glob`/`@types/glob` devDependencies, resolving 50 of 51 known vulnerabilities in transitive dev dependencies (`form-data`, `tar-fs`, `minimatch`, `brace-expansion`, `js-yaml`, `undici`, `jws`, `serialize-javascript`, `qs`, `diff`, `tmp`, `picomatch`, `underscore`, `linkify-it`, ...), via `pnpm-workspace.yaml` overrides where the upstream packages hadn't bumped their own dependency yet. One moderate-severity finding (`uuid`, nested inside `@vscode/vsce > @azure/identity > @azure/msal-node`) is intentionally left as-is: fixing it requires a major version jump of `uuid` that this codebase doesn't control the call site of, and the package is only exercised by the optional `vsce publish`/login flow, not `vsce package`.
+- **None of these packages are runtime dependencies of the extension** — they're devDependencies used only to build/test/package it locally, and `node_modules` is already excluded from the published `.vsix` via `.vscodeignore`. This is a supply-chain/dev-environment hardening, not a fix for anything reachable by end users.
+
+### Changed
+
+- The published `.vsix` no longer bundles `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.gitignore`, or stale build artifacts from previously removed source files (a `clean` step now wipes `out/` before every `vscode:prepublish`/package). Package size dropped from ~207 KB to ~138 KB.
+
 ## [0.8.0] - 2026-08-01
 
 ### Added

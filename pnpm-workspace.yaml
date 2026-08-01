@@ -1,3 +1,16 @@
 allowBuilds:
   "@vscode/vsce-sign": true
   keytar: true
+
+overrides:
+  form-data: ">=4.0.6"
+  tar-fs: ">=2.1.4"
+  jws: ">=3.2.3"
+  serialize-javascript: ">=7.0.5"
+  undici: ">=6.27.0"
+  picomatch: ">=2.3.2"
+  underscore: ">=1.13.8"
+  tmp: ">=0.2.6"
+  js-yaml: ">=4.3.0"
+  qs: ">=6.15.2"
+  diff: ">=8.0.3"
