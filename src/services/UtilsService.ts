@@ -48,6 +48,11 @@ export class UtilsService {
 
                 let match;
 
+                // Partagé avec les passes suivantes pour éviter de compter deux fois
+                // le même identifiant (ex: le `name` d'un import matché à la fois ici
+                // et par usageRegex plus bas).
+                const seen = new Set<string>();
+
                 while ((match = importRegex.exec(content)) !== null) {
                     const importPath = match[1].slice(1, -1); // Enlever les guillemets
 
@@ -58,6 +63,9 @@ export class UtilsService {
                             const start = TextUtils.indexToPosition(content, nameIndex);
 
                             const end = TextUtils.indexToPosition(content, nameIndex + name.length);
+
+                            const locationKey = `${uri.fsPath}:${start.line}:${start.character}`;
+                            seen.add(locationKey);
 
                             results.push(new vscode.Location(
                                 uri,
@@ -75,8 +83,6 @@ export class UtilsService {
                 const usageRegex = new RegExp(`(?<!['"\`<>])\\b${name}\\b(?!\\s*:)`, 'g');
 
                 const templateBindingRegex = new RegExp(`[:@\\w\\-]+=['"]\\s*[^'"]*\\b${name}\\b[^'"]*['"]`, 'g');
-
-                const seen = new Set<string>();
 
                 while ((match = typeUsageRegex.exec(content)) !== null) {
                     const matchStart = match.index + match[0].indexOf(name);

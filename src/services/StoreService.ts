@@ -210,7 +210,7 @@ export class StoreService {
 
             const uris = await vscode.workspace.findFiles(
                 '**/*.{vue,js,ts}',
-                '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**,, **/utils/**,**/lib/**,**/helpers/**,**/constants/**,**/shared/**, **/public/**,**/config/**, **/assets/**}'
+                '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**,**/utils/**,**/lib/**,**/helpers/**,**/constants/**,**/shared/**, **/public/**,**/config/**, **/assets/**}'
             );
 
             const results: vscode.Location[] = [];
@@ -326,7 +326,7 @@ export class StoreService {
             }
 
             // Pattern 1: store.member (avec le hook direct)
-            const dotPattern = new RegExp(`\\b${storeHookName}\\(\\).${memberName}\\b`, 'g');
+            const dotPattern = new RegExp(`\\b${storeHookName}\\(\\)\\.${memberName}\\b`, 'g');
             TextUtils.findMatches(dotPattern, content, uri, results);
 
             // Pattern 2: const { member } = useStore()
@@ -334,7 +334,7 @@ export class StoreService {
             TextUtils.findMatches(destructuringPattern, content, uri, results);
 
             // Pattern 3: store.value.member (pour les stores en composition API)
-            const valuePattern = new RegExp(`\\b${storeHookName}\\(\\).value.${memberName}\\b`, 'g');
+            const valuePattern = new RegExp(`\\b${storeHookName}\\(\\)\\.value\\.${memberName}\\b`, 'g');
             TextUtils.findMatches(valuePattern, content, uri, results);
 
             // Nouveau: Détection des alias de store (const adminStore = useAdminStore())
@@ -416,8 +416,8 @@ export class StoreService {
         const storeInfos: NuxtComponentInfo[] = [];
 
         const files = await vscode.workspace.findFiles(
-            '**/*.{ts,js}',
-            '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**,, **/utils/**,**/lib/**,**/helpers/**,**/constants/**,**/shared/**, **/public/**,**/config/**, **/assets/**}'
+            new vscode.RelativePattern(dir, '**/*.{ts,js}'),
+            '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**,**/utils/**,**/lib/**,**/helpers/**,**/constants/**,**/shared/**, **/public/**,**/config/**, **/assets/**}'
         );
 
         for (const file of files) {
@@ -511,6 +511,19 @@ export class StoreService {
                             }
                         }
 
+                        // functionRegex capture aussi `const NAME = computed(() => ...)` comme méthode
+                        // (l'appel englobant n'est pas exclu par la regex) : les computed restent
+                        // uniquement des getters.
+                        storeInfo.members!.methods = storeInfo.members!.methods!.filter(
+                            m => !storeInfo.members!.getters!.includes(m)
+                        );
+
+                        // variableRegex capture tout `const/let/var NAME =`, y compris les méthodes
+                        // fléchées et les computed déjà classés ailleurs : dédupliquer.
+                        storeInfo.members!.variables = storeInfo.members!.variables!.filter(
+                            v => !storeInfo.members!.methods!.includes(v) && !storeInfo.members!.getters!.includes(v)
+                        );
+
                         // Analyse du return pour vérifier ce qui est exposé
                         const returnRegex = /return\s*{([^}]*)}/s;
                         const returnMatch = content.match(returnRegex);
@@ -535,7 +548,10 @@ export class StoreService {
             }
         }
 
-        this.autoImportCache.set('stores', storeInfos);
+        // Fusionner avec les stores déjà connus des autres répertoires "stores"
+        // (layers/monorepo) plutôt que d'écraser tout le cache à chaque appel.
+        const otherStores = (this.autoImportCache.get('stores') || []).filter(s => !s.path.startsWith(dir));
+        this.autoImportCache.set('stores', [...otherStores, ...storeInfos]);
         this.invalidateReferenceCache();
     }
 
