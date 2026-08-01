@@ -3,7 +3,7 @@
   "license": "MIT",
   "displayName": "Nuxt Intellisense",
   "description": "Enhanced IntelliSense for Nuxt3 projects",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "publisher": "MeriteK",
   "changelog": "CHANGELOG.md",
   "engines": {
@@ -107,9 +107,9 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
+    "pretest": "npm run compile",
     "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js",
+    "test": "mocha --require ./src/test/mocha.setup.js --timeout 10000 \"out/test/unit/**/*.test.js\" \"out/test/integration/**/*.test.js\"",
     "package": "vsce package",
     "publish": "vsce publish"
   },
