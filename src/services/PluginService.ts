@@ -61,7 +61,7 @@ export class PluginService {
 
             lenses.push(
                 new vscode.CodeLens(range, {
-                    title: `🔌 ${referenceCount} reference${referenceCount > 1 ? 's' : ''}`,
+                    title: `$(plug) ${referenceCount} reference${referenceCount > 1 ? 's' : ''}`,
                     command: 'editor.action.showReferences',
                     arguments: [
                         document.uri,
@@ -102,7 +102,7 @@ export class PluginService {
 
         const pluginUris = await vscode.workspace.findFiles(
             `**/plugins/${pluginName}.{js,ts}`,
-            '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**,, **/utils/**,**/lib/**,**/helpers/**,**/constants/**,**/shared/**, **/public/**,**/config/**, **/assets/**,**/store/**,**/stores/**}'
+            '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**}'
         );
 
         if (pluginUris.length === 0) {
@@ -173,7 +173,7 @@ export class PluginService {
 
         const allFileUris = await vscode.workspace.findFiles(
             '**/*.{vue,js,ts}',
-            '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**,, **/utils/**,**/lib/**,**/helpers/**,**/constants/**,**/shared/**, **/public/**,**/config/**, **/assets/**,**/store/**,**/stores/**}'
+            '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**}'
         );
 
         for (const uri of allFileUris) {

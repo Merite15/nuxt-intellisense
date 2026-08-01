@@ -144,7 +144,7 @@ export class ComponentService {
 
             lenses.push(
                 new vscode.CodeLens(range, {
-                    title: `🧩 ${referenceCount} reference${referenceCount > 1 ? 's' : ''} | ${nuxtComponentName}`,
+                    title: `$(package) ${referenceCount} reference${referenceCount > 1 ? 's' : ''} | ${nuxtComponentName}`,
                     command: 'editor.action.showReferences',
                     arguments: [
                         document.uri,
@@ -171,7 +171,7 @@ export class ComponentService {
 
                 lenses.push(
                     new vscode.CodeLens(range, {
-                        title: `🧩 ${referenceCount} reference${referenceCount > 1 ? 's' : ''} | ${nuxtComponentName}`,
+                        title: `$(package) ${referenceCount} reference${referenceCount > 1 ? 's' : ''} | ${nuxtComponentName}`,
                         command: 'editor.action.showReferences',
                         arguments: [
                             document.uri,
@@ -198,7 +198,7 @@ export class ComponentService {
 
                 lenses.push(
                     new vscode.CodeLens(range, {
-                        title: `⚡ ${referenceCount} reference${referenceCount > 1 ? 's' : ''} | ${nuxtComponentName}`,
+                        title: `$(symbol-event) ${referenceCount} reference${referenceCount > 1 ? 's' : ''} | ${nuxtComponentName}`,
                         command: 'editor.action.showReferences',
                         arguments: [
                             document.uri,
@@ -228,7 +228,7 @@ export class ComponentService {
 
                 lenses.push(
                     new vscode.CodeLens(range, {
-                        title: `🧩 ${referenceCount} reference${referenceCount > 1 ? 's' : ''} | ${nuxtComponentName}`,
+                        title: `$(package) ${referenceCount} reference${referenceCount > 1 ? 's' : ''} | ${nuxtComponentName}`,
                         command: 'editor.action.showReferences',
                         arguments: [
                             document.uri,

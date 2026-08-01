@@ -112,18 +112,21 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
                     const pos = document.positionAt(match.index);
                     const range = new vscode.Range(pos.line, 0, pos.line, 0);
 
-                    // Type d'emoji et libellé selon le type d'export
-                    let emoji = '🔧'; // Par défaut pour les utilitaires
+                    // Icône et libellé selon le type d'export
+                    let icon = '$(tools)'; // Par défaut pour les utilitaires
                     let typeLabel = 'utilitaire';
 
-                    if (exportType === 'interface' || exportType === 'type') {
-                        emoji = '📝';
-                        typeLabel = exportType === 'interface' ? 'interface' : 'type';
+                    if (exportType === 'interface') {
+                        icon = '$(symbol-interface)';
+                        typeLabel = 'interface';
+                    } else if (exportType === 'type') {
+                        icon = '$(symbol-property)';
+                        typeLabel = 'type';
                     } else if (exportType === 'const') {
-                        emoji = '📊';
+                        icon = '$(symbol-constant)';
                         typeLabel = 'constante';
                     } else if (exportType === 'class') {
-                        emoji = '🏛️';
+                        icon = '$(symbol-class)';
                         typeLabel = 'classe';
                     }
 
@@ -134,7 +137,7 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
 
                     lenses.push(
                         new vscode.CodeLens(range, {
-                            title: `${emoji} ${referenceCount} reference${referenceCount > 1 ? 's' : ''}`,
+                            title: `${icon} ${referenceCount} reference${referenceCount > 1 ? 's' : ''}`,
                             command: 'editor.action.showReferences',
                             arguments: [
                                 document.uri,

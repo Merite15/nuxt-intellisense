@@ -71,7 +71,7 @@ export class ComposableService {
 
             lenses.push(
                 new vscode.CodeLens(range, {
-                    title: `🔄 ${referenceCount} reference${referenceCount > 1 ? 's' : ''}`,
+                    title: `$(sync) ${referenceCount} reference${referenceCount > 1 ? 's' : ''}`,
                     command: 'editor.action.showReferences',
                     arguments: [
                         document.uri,

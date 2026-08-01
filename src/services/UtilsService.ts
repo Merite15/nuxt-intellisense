@@ -106,10 +106,13 @@ export class UtilsService {
 
                     const line = content.substring(lineStart, lineEnd !== -1 ? lineEnd : content.length);
 
-                    if (
-                        line.includes('<') && line.includes('>') || // HTML
-                        line.includes(`'${name}'`) || line.includes(`"${name}"`) || line.includes(`\`${name}\``)
-                    ) {
+                    if (line.includes('<') && line.includes('>')) { // HTML
+                        continue;
+                    }
+
+                    // Ignorer les occurrences situées à l'intérieur d'une chaîne de caractères
+                    // (ex: "use const here" ne doit pas compter comme une référence à `const`)
+                    if (TextUtils.isInsideStringLiteral(content, matchStart)) {
                         continue;
                     }
 

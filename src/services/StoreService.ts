@@ -67,13 +67,13 @@ export class StoreService {
                 const { methods, variables, getters } = storeInfo.members;
 
                 if (methods?.length) {
-                    memberDetails.push(`⚡ ${methods.length} method${methods.length > 1 ? 's' : ''}`);
+                    memberDetails.push(`$(symbol-method) ${methods.length} method${methods.length > 1 ? 's' : ''}`);
                 }
                 if (variables?.length) {
-                    memberDetails.push(`📦 ${variables.length} var${variables.length > 1 ? 's' : ''}`);
+                    memberDetails.push(`$(symbol-variable) ${variables.length} var${variables.length > 1 ? 's' : ''}`);
                 }
                 if (getters?.length) {
-                    memberDetails.push(`🔍 ${getters.length} getter${getters.length > 1 ? 's' : ''}`);
+                    memberDetails.push(`$(symbol-property) ${getters.length} getter${getters.length > 1 ? 's' : ''}`);
                 }
                 // Pour les méthodes
                 for (const method of methods || []) {
@@ -90,7 +90,7 @@ export class StoreService {
                         const uniqueReferences = TextUtils.removeDuplicateReferences(references);
 
                         lenses.push(new vscode.CodeLens(methodRange, {
-                            title: `⚡ ${method}() • ${uniqueReferences.length} reference${uniqueReferences.length !== 1 ? 's' : ''}`,
+                            title: `$(symbol-method) ${method}() • ${uniqueReferences.length} reference${uniqueReferences.length !== 1 ? 's' : ''}`,
                             command: 'editor.action.showReferences',
                             arguments: [
                                 document.uri,
@@ -115,7 +115,7 @@ export class StoreService {
                         const uniqueReferences = TextUtils.removeDuplicateReferences(references);
 
                         lenses.push(new vscode.CodeLens(varRange, {
-                            title: `📦 ${variable} • ${uniqueReferences.length} reference${uniqueReferences.length !== 1 ? 's' : ''}`,
+                            title: `$(symbol-variable) ${variable} • ${uniqueReferences.length} reference${uniqueReferences.length !== 1 ? 's' : ''}`,
                             command: 'editor.action.showReferences',
                             arguments: [
                                 document.uri,
@@ -140,7 +140,7 @@ export class StoreService {
                         const uniqueReferences = TextUtils.removeDuplicateReferences(references);
 
                         lenses.push(new vscode.CodeLens(getterRange, {
-                            title: `🔍 ${getter} • ${uniqueReferences.length} reference${uniqueReferences.length !== 1 ? 's' : ''}`,
+                            title: `$(symbol-property) ${getter} • ${uniqueReferences.length} reference${uniqueReferences.length !== 1 ? 's' : ''}`,
                             command: 'editor.action.showReferences',
                             arguments: [
                                 document.uri,
@@ -157,7 +157,7 @@ export class StoreService {
 
             lenses.push(
                 new vscode.CodeLens(range, {
-                    title: `🗃️ ${storeName}${memberInfo} • ${referenceCount} reference${referenceCount > 1 ? 's' : ''}`,
+                    title: `$(database) ${storeName}${memberInfo} • ${referenceCount} reference${referenceCount > 1 ? 's' : ''}`,
                     command: 'editor.action.showReferences',
                     arguments: [
                         document.uri,

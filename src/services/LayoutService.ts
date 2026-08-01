@@ -53,14 +53,14 @@ export class LayoutService {
             if (layoutName === 'default') {
                 lenses.push(
                     new vscode.CodeLens(range, {
-                        title: `🖼️ Default Layout`,
+                        title: `$(layout) Default Layout`,
                         command: ''
                     })
                 );
             } else {
                 lenses.push(
                     new vscode.CodeLens(range, {
-                        title: `🖼️ ${referenceCount} reference${referenceCount > 1 ? 's' : ''}`,
+                        title: `$(layout) ${referenceCount} reference${referenceCount > 1 ? 's' : ''}`,
                         command: referenceCount > 0 ? 'editor.action.showReferences' : '',
                         arguments: referenceCount > 0
                             ? [document.uri, pos, references]

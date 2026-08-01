@@ -51,7 +51,7 @@ export class MiddlewareService {
             if (isGlobal) {
                 lenses.push(
                     new vscode.CodeLens(range, {
-                        title: `🌍 Global Middleware`,
+                        title: `$(globe) Global Middleware`,
                         command: ''
                     })
                 );
@@ -64,7 +64,7 @@ export class MiddlewareService {
 
                 lenses.push(
                     new vscode.CodeLens(range, {
-                        title: `🔗 ${referenceCount} reference${referenceCount > 1 ? 's' : ''}`,
+                        title: `$(link) ${referenceCount} reference${referenceCount > 1 ? 's' : ''}`,
                         command: referenceCount > 0 ? 'editor.action.showReferences' : '',
                         arguments: referenceCount > 0
                             ? [document.uri, pos, references]
