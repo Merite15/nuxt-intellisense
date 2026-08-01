@@ -106,32 +106,41 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
 
                 let match: RegExpExecArray | null;
 
+                const exportsFound: { exportType: string, name: string, pos: vscode.Position, matchText: string }[] = [];
+
                 while ((match = utilsRegex.exec(text))) {
-                    const exportType = match[1];
-                    const name = match[2];
-                    const pos = document.positionAt(match.index);
+                    exportsFound.push({
+                        exportType: match[1],
+                        name: match[2],
+                        pos: document.positionAt(match.index),
+                        matchText: match[0]
+                    });
+                }
+
+                // Une seule passe sur le workspace pour tous les exports du fichier
+                // (au lieu d'un scan complet par export).
+                const referencesByName = await this.utilsService.findUtilsReferencesForExports(
+                    document,
+                    exportsFound.map(e => ({ name: e.name, position: e.pos }))
+                );
+
+                for (const { exportType, name, pos, matchText } of exportsFound) {
                     const range = new vscode.Range(pos.line, 0, pos.line, 0);
 
-                    // Icône et libellé selon le type d'export
+                    // Icône selon le type d'export
                     let icon = '$(tools)'; // Par défaut pour les utilitaires
-                    let typeLabel = 'utilitaire';
 
                     if (exportType === 'interface') {
                         icon = '$(symbol-interface)';
-                        typeLabel = 'interface';
                     } else if (exportType === 'type') {
                         icon = '$(symbol-property)';
-                        typeLabel = 'type';
                     } else if (exportType === 'const') {
                         icon = '$(symbol-constant)';
-                        typeLabel = 'constante';
                     } else if (exportType === 'class') {
                         icon = '$(symbol-class)';
-                        typeLabel = 'classe';
                     }
 
-                    // Rechercher les références
-                    const references = await this.utilsService.findUtilsReferences(document, name, pos);
+                    const references = referencesByName.get(name) || [];
 
                     const referenceCount = references.length;
 
@@ -141,7 +150,7 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
                             command: 'editor.action.showReferences',
                             arguments: [
                                 document.uri,
-                                new vscode.Position(pos.line, match[0].indexOf(name)),
+                                new vscode.Position(pos.line, matchText.indexOf(name)),
                                 references
                             ]
                         })
@@ -236,5 +245,6 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
         this.middlewareService?.dispose();
         this.layoutService?.dispose();
         this.storeService?.dispose();
+        this.utilsService?.dispose();
     }
 }

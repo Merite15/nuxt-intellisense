@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { TextUtils } from '../utils/textUtils';
+import { FileUtils } from '../utils/fileUtils';
 
 interface ReferenceCache {
     references: vscode.Location[];
@@ -20,6 +21,7 @@ export class ComposableService {
     private referenceCacheTTL: number = 300000; // 5 minutes comme fallback
     private fileWatcher: vscode.FileSystemWatcher | undefined;
     private exposedItemsCache: Map<string, ExposedItem[]> = new Map();
+    private documentMemberReferenceCache: Map<string, { references: Map<string, vscode.Location[]>, timestamp: number }> = new Map();
 
     constructor() {
         this.setupFileWatcher();
@@ -35,18 +37,18 @@ export class ComposableService {
         );
 
         // Lors d'un changement de fichier, invalider le cache
-        this.fileWatcher.onDidChange(() => {
+        // (en ignorant node_modules/.nuxt/.output/dist, régénérés en continu par Nuxt en dev)
+        const onFileEvent = (uri: vscode.Uri) => {
+            if (FileUtils.shouldSkipFile(uri.fsPath)) {
+                return;
+            }
             this.invalidateReferenceCache();
             this.exposedItemsCache.clear();
-        });
-        this.fileWatcher.onDidCreate(() => {
-            this.invalidateReferenceCache();
-            this.exposedItemsCache.clear();
-        });
-        this.fileWatcher.onDidDelete(() => {
-            this.invalidateReferenceCache();
-            this.exposedItemsCache.clear();
-        });
+        };
+
+        this.fileWatcher.onDidChange(onFileEvent);
+        this.fileWatcher.onDidCreate(onFileEvent);
+        this.fileWatcher.onDidDelete(onFileEvent);
 
         // S'assurer que le watcher est disposé lorsqu'il n'est plus nécessaire
         vscode.Disposable.from(this.fileWatcher);
@@ -59,12 +61,18 @@ export class ComposableService {
         // Récupérer ou analyser les items exposés
         const exposedItems = await this.getExposedItems(document);
 
-        for (const item of exposedItems) {
-            // Générer une clé unique pour cet item dans ce document
-            const cacheKey = `${document.uri.toString()}:${item.name}${item.type === 'variable' || item.type === 'method' ? `:${item.composableName}` : ''}`;
+        // Les variables/méthodes exposées sont recherchées en une seule passe sur le
+        // workspace (au lieu d'un scan complet par item) — voir getCachedMemberReferences.
+        const memberReferences = await this.getCachedMemberReferences(document, exposedItems);
 
-            // Trouver les références
-            const references = await this.getCachedReferences(cacheKey, document, item);
+        for (const item of exposedItems) {
+            const references = item.type === 'composable'
+                ? await this.getCachedReferences(
+                    `${document.uri.toString()}:${item.name}`,
+                    document,
+                    item
+                )
+                : memberReferences.get(this.itemKey(item)) || [];
             const referenceCount = references.length;
 
             const range = new vscode.Range(item.position.line, 0, item.position.line, 0);
@@ -245,47 +253,76 @@ export class ComposableService {
 
     private async findReferencesForItem(document: vscode.TextDocument, item: ExposedItem): Promise<vscode.Location[]> {
         try {
-            const results: vscode.Location[] = [];
-
-            if (item.type === 'composable') {
-                // Utiliser l'approche existante pour les composables
-                return this.findAllReferences(document, item.name, item.position);
-            } else {
-                // Pour les variables et méthodes exposées par un composable
-                const uris = await vscode.workspace.findFiles(
-                    '**/*.{vue,js,ts}',
-                    '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**, **/utils/**,**/lib/**,**/helpers/**,**/constants/**,**/shared/**, **/public/**,**/config/**, **/assets/**}'
-                );
-
-                const batchSize = 30;
-                for (let i = 0; i < uris.length; i += batchSize) {
-                    const batch = uris.slice(i, i + batchSize);
-
-                    await Promise.all(batch.map(async (uri) => {
-                        try {
-                            // Ignorer le fichier source pour les items exposés
-                            if (uri.fsPath === document.uri.fsPath &&
-                                item.type !== 'composable') {
-                                return;
-                            }
-
-                            const content = fs.readFileSync(uri.fsPath, 'utf-8');
-
-                            // 1. Vérifier si le composable parent est utilisé
-                            if (item.composableName) {
-                                this.findItemReferencesInFile(content, uri, item, results);
-                            }
-                        } catch (error) {
-                            // Ignorer les erreurs de lecture de fichier
-                        }
-                    }));
-                }
-            }
-
-            return results;
+            // Utiliser l'approche existante pour les composables
+            return await this.findAllReferences(document, item.name, item.position);
         } catch (e) {
             return [];
         }
+    }
+
+    private itemKey(item: ExposedItem): string {
+        return `${item.name}:${item.composableName ?? ''}`;
+    }
+
+    /**
+     * Recherche les références de toutes les variables/méthodes exposées d'un document
+     * en une seule passe sur le workspace : chaque fichier n'est lu qu'une fois, quel
+     * que soit le nombre d'items exposés (auparavant : un scan + une lecture complète
+     * du workspace par item exposé).
+     */
+    private async getCachedMemberReferences(
+        document: vscode.TextDocument,
+        items: ExposedItem[]
+    ): Promise<Map<string, vscode.Location[]>> {
+        const memberItems = items.filter(item => item.type !== 'composable' && item.composableName);
+
+        const resultsByKey = new Map<string, vscode.Location[]>();
+        for (const item of memberItems) {
+            resultsByKey.set(this.itemKey(item), []);
+        }
+
+        if (memberItems.length === 0) {
+            return resultsByKey;
+        }
+
+        const cacheKey = document.uri.toString();
+        const now = Date.now();
+        const cachedData = this.documentMemberReferenceCache.get(cacheKey);
+        if (cachedData && (now - cachedData.timestamp < this.referenceCacheTTL)) {
+            return cachedData.references;
+        }
+
+        const uris = await vscode.workspace.findFiles(
+            '**/*.{vue,js,ts}',
+            '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**, **/utils/**,**/lib/**,**/helpers/**,**/constants/**,**/shared/**, **/public/**,**/config/**, **/assets/**}'
+        );
+
+        const batchSize = 30;
+        for (let i = 0; i < uris.length; i += batchSize) {
+            const batch = uris.slice(i, i + batchSize);
+
+            await Promise.all(batch.map(async (uri) => {
+                if (uri.fsPath === document.uri.fsPath) {
+                    return;
+                }
+
+                let content: string;
+                try {
+                    content = fs.readFileSync(uri.fsPath, 'utf-8');
+                } catch (error) {
+                    return;
+                }
+
+                for (const item of memberItems) {
+                    const results = resultsByKey.get(this.itemKey(item))!;
+                    this.findItemReferencesInFile(content, uri, item, results);
+                }
+            }));
+        }
+
+        this.documentMemberReferenceCache.set(cacheKey, { references: resultsByKey, timestamp: now });
+
+        return resultsByKey;
     }
 
     private findItemReferencesInFile(content: string, uri: vscode.Uri, item: ExposedItem, results: vscode.Location[]): void {
@@ -491,6 +528,7 @@ export class ComposableService {
     // Méthode pour invalider le cache pour les tests ou un rafraîchissement manuel
     public invalidateReferenceCache(): void {
         this.referenceCache.clear();
+        this.documentMemberReferenceCache.clear();
     }
 
     // S'assurer que les ressources sont libérées lorsqu'elles ne sont plus nécessaires

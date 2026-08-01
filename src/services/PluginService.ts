@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { TextUtils } from '../utils/textUtils';
+import { FileUtils } from '../utils/fileUtils';
 
 interface ReferenceCache {
     references: vscode.Location[];
@@ -27,11 +28,18 @@ export class PluginService {
             false  // Ne pas ignorer les suppressions
         );
 
-        this.fileWatcher.onDidChange(() => this.invalidateReferenceCache());
+        // (en ignorant node_modules/.nuxt/.output/dist, régénérés en continu par Nuxt en dev)
+        const onFileEvent = (uri: vscode.Uri) => {
+            if (!FileUtils.shouldSkipFile(uri.fsPath)) {
+                this.invalidateReferenceCache();
+            }
+        };
 
-        this.fileWatcher.onDidCreate(() => this.invalidateReferenceCache());
+        this.fileWatcher.onDidChange(onFileEvent);
 
-        this.fileWatcher.onDidDelete(() => this.invalidateReferenceCache());
+        this.fileWatcher.onDidCreate(onFileEvent);
+
+        this.fileWatcher.onDidDelete(onFileEvent);
 
         vscode.Disposable.from(this.fileWatcher);
     }

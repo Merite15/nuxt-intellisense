@@ -28,11 +28,18 @@ export class StoreService {
             false
         );
 
-        this.fileWatcher.onDidChange(() => this.invalidateReferenceCache());
+        // (en ignorant node_modules/.nuxt/.output/dist, régénérés en continu par Nuxt en dev)
+        const onFileEvent = (uri: vscode.Uri) => {
+            if (!FileUtils.shouldSkipFile(uri.fsPath)) {
+                this.invalidateReferenceCache();
+            }
+        };
 
-        this.fileWatcher.onDidCreate(() => this.invalidateReferenceCache());
+        this.fileWatcher.onDidChange(onFileEvent);
 
-        this.fileWatcher.onDidDelete(() => this.invalidateReferenceCache());
+        this.fileWatcher.onDidCreate(onFileEvent);
+
+        this.fileWatcher.onDidDelete(onFileEvent);
 
         vscode.Disposable.from(this.fileWatcher);
     }
@@ -75,6 +82,12 @@ export class StoreService {
                 if (getters?.length) {
                     memberDetails.push(`$(symbol-property) ${getters.length} getter${getters.length > 1 ? 's' : ''}`);
                 }
+
+                // Une seule passe sur le workspace pour tous les membres du store
+                // (au lieu d'un scan complet par méthode/variable/getter).
+                const allMemberNames = [...(methods || []), ...(variables || []), ...(getters || [])];
+                const memberReferencesByName = await this.getCachedAllMemberReferences(storeName, allMemberNames);
+
                 // Pour les méthodes
                 for (const method of methods || []) {
 
@@ -86,7 +99,7 @@ export class StoreService {
                         const methodRange = new vscode.Range(methodLine, 0, methodLine, 0);
 
                         // Trouver les références de cette méthode
-                        const references = await this.getCachedMemberReferences(storeName, method);
+                        const references = memberReferencesByName.get(method) || [];
                         const uniqueReferences = TextUtils.removeDuplicateReferences(references);
 
                         lenses.push(new vscode.CodeLens(methodRange, {
@@ -111,7 +124,7 @@ export class StoreService {
                         const varLine = document.positionAt(varPos).line;
                         const varRange = new vscode.Range(varLine, 0, varLine, 0);
 
-                        const references = await this.getCachedMemberReferences(storeName, variable);
+                        const references = memberReferencesByName.get(variable) || [];
                         const uniqueReferences = TextUtils.removeDuplicateReferences(references);
 
                         lenses.push(new vscode.CodeLens(varRange, {
@@ -136,7 +149,7 @@ export class StoreService {
                         const getterLine = document.positionAt(getterPos).line;
                         const getterRange = new vscode.Range(getterLine, 0, getterLine, 0);
 
-                        const references = await this.getCachedMemberReferences(storeName, getter);
+                        const references = memberReferencesByName.get(getter) || [];
                         const uniqueReferences = TextUtils.removeDuplicateReferences(references);
 
                         lenses.push(new vscode.CodeLens(getterRange, {
@@ -296,22 +309,36 @@ export class StoreService {
         }
     }
 
-    private async findMemberReferences(storeName: string, memberName: string): Promise<vscode.Location[]> {
+    /**
+     * Recherche les références de plusieurs membres d'un store en une seule passe sur
+     * le workspace : chaque fichier n'est lu et parcouru qu'une fois, quel que soit le
+     * nombre de membres (auparavant : un scan + une lecture complète du workspace par
+     * membre, soit un coût multiplié par le nombre de méthodes/variables/getters).
+     */
+    private async findAllMemberReferences(storeName: string, memberNames: string[]): Promise<Map<string, vscode.Location[]>> {
+        const resultsByMember = new Map<string, vscode.Location[]>();
+        for (const memberName of memberNames) {
+            resultsByMember.set(memberName, []);
+        }
+
+        if (memberNames.length === 0) {
+            return resultsByMember;
+        }
+
         const normalizedName = storeName
             .split(/[-_\s]/)
             .map(s => s.charAt(0).toUpperCase() + s.slice(1))
             .join('');
 
         const storeHookName = `use${normalizedName}Store`;
-        const results: vscode.Location[] = [];
 
         const uris = await vscode.workspace.findFiles(
             '**/*.{vue,js,ts}',
             '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**,**/utils/**,**/lib/**,**/helpers/**,**/constants/**,**/shared/**,**/public/**,**/config/**,**/assets/**}'
         );
 
-        // Nouveau: Détection des alias de store
         const storeAliasPatterns: string[] = [];
+        const fileContents = new Map<string, string>();
 
         for (const uri of uris) {
             if (FileUtils.shouldSkipFile(uri.fsPath)) {
@@ -324,21 +351,10 @@ export class StoreService {
             } catch (e) {
                 continue;
             }
+            fileContents.set(uri.fsPath, content);
 
-            // Pattern 1: store.member (avec le hook direct)
-            const dotPattern = new RegExp(`\\b${storeHookName}\\(\\)\\.${memberName}\\b`, 'g');
-            TextUtils.findMatches(dotPattern, content, uri, results);
-
-            // Pattern 2: const { member } = useStore()
-            const destructuringPattern = new RegExp(`const\\s*\\{\\s*${memberName}\\s*\\}\\s*=\\s*${storeHookName}\\(\\\)`, 'g');
-            TextUtils.findMatches(destructuringPattern, content, uri, results);
-
-            // Pattern 3: store.value.member (pour les stores en composition API)
-            const valuePattern = new RegExp(`\\b${storeHookName}\\(\\)\\.value\\.${memberName}\\b`, 'g');
-            TextUtils.findMatches(valuePattern, content, uri, results);
-
-            // Nouveau: Détection des alias de store (const adminStore = useAdminStore())
-            const storeAliasRegex = new RegExp(`const\\s+(\\w+)\\s*=\\s*${storeHookName}\\(\\\)`, 'g');
+            // Détection des alias de store (const adminStore = useAdminStore()), indépendante du membre
+            const storeAliasRegex = new RegExp(`const\\s+(\\w+)\\s*=\\s*${storeHookName}\\(\\)`, 'g');
             let aliasMatch;
             while ((aliasMatch = storeAliasRegex.exec(content)) !== null) {
                 const alias = aliasMatch[1];
@@ -347,33 +363,39 @@ export class StoreService {
                 }
             }
 
-            // Nouveau: Détection des références via storeToRefs
-            // Pattern: const { member } = storeToRefs(store)
-            const storeToRefsPattern = new RegExp(`const\\s*\\{\\s*${memberName}\\s*\\}\\s*=\\s*storeToRefs\\(\\s*\\w+Store\\s*\\)`, 'g');
-            TextUtils.findMatches(storeToRefsPattern, content, uri, results);
+            for (const memberName of memberNames) {
+                const results = resultsByMember.get(memberName)!;
 
-            // Pattern spécifique pour les aliases + storeToRefs
-            for (const alias of storeAliasPatterns) {
-                const aliasStoreToRefsPattern = new RegExp(`const\\s*\\{\\s*${memberName}\\s*\\}\\s*=\\s*storeToRefs\\(\\s*${alias}\\s*\\)`, 'g');
-                TextUtils.findMatches(aliasStoreToRefsPattern, content, uri, results);
+                // Pattern 1: store.member (avec le hook direct)
+                const dotPattern = new RegExp(`\\b${storeHookName}\\(\\)\\.${memberName}\\b`, 'g');
+                TextUtils.findMatches(dotPattern, content, uri, results);
+
+                // Pattern 2: const { member } = useStore()
+                const destructuringPattern = new RegExp(`const\\s*\\{\\s*${memberName}\\s*\\}\\s*=\\s*${storeHookName}\\(\\)`, 'g');
+                TextUtils.findMatches(destructuringPattern, content, uri, results);
+
+                // Pattern 3: store.value.member (pour les stores en composition API)
+                const valuePattern = new RegExp(`\\b${storeHookName}\\(\\)\\.value\\.${memberName}\\b`, 'g');
+                TextUtils.findMatches(valuePattern, content, uri, results);
+
+                // Pattern: const { member } = storeToRefs(store)
+                const storeToRefsPattern = new RegExp(`const\\s*\\{\\s*${memberName}\\s*\\}\\s*=\\s*storeToRefs\\(\\s*\\w+Store\\s*\\)`, 'g');
+                TextUtils.findMatches(storeToRefsPattern, content, uri, results);
             }
         }
 
-        // Nouveau: Recherche des références via les alias détectés
-        if (storeAliasPatterns.length > 0) {
-            for (const uri of uris) {
-                if (FileUtils.shouldSkipFile(uri.fsPath)) {
-                    continue;
-                }
+        // Pattern spécifique pour les aliases + storeToRefs, et pour les usages alias.member,
+        // une fois tous les alias détectés (nécessite l'ensemble du fichier déjà lu ci-dessus).
+        for (const [fsPath, content] of fileContents) {
+            const uri = vscode.Uri.file(fsPath);
 
-                let content: string;
-                try {
-                    content = fs.readFileSync(uri.fsPath, 'utf-8');
-                } catch (e) {
-                    continue;
-                }
+            for (const memberName of memberNames) {
+                const results = resultsByMember.get(memberName)!;
 
                 for (const alias of storeAliasPatterns) {
+                    const aliasStoreToRefsPattern = new RegExp(`const\\s*\\{\\s*${memberName}\\s*\\}\\s*=\\s*storeToRefs\\(\\s*${alias}\\s*\\)`, 'g');
+                    TextUtils.findMatches(aliasStoreToRefsPattern, content, uri, results);
+
                     // Pattern 4: alias.member (adminStore.get())
                     const aliasDotPattern = new RegExp(`\\b${alias}\\.${memberName}\\b`, 'g');
                     TextUtils.findMatches(aliasDotPattern, content, uri, results);
@@ -385,22 +407,21 @@ export class StoreService {
             }
         }
 
-        return results;
+        return resultsByMember;
     }
 
-    private memberReferenceCache: Map<string, ReferenceCache> = new Map();
+    private storeMembersReferenceCache: Map<string, { references: Map<string, vscode.Location[]>, timestamp: number }> = new Map();
 
-    private async getCachedMemberReferences(storeName: string, memberName: string): Promise<vscode.Location[]> {
-        const cacheKey = `${storeName}:${memberName}`;
+    private async getCachedAllMemberReferences(storeName: string, memberNames: string[]): Promise<Map<string, vscode.Location[]>> {
         const now = Date.now();
 
-        const cachedData = this.memberReferenceCache.get(cacheKey);
+        const cachedData = this.storeMembersReferenceCache.get(storeName);
         if (cachedData && (now - cachedData.timestamp < this.referenceCacheTTL)) {
             return cachedData.references;
         }
 
-        const references = await this.findMemberReferences(storeName, memberName);
-        this.memberReferenceCache.set(cacheKey, {
+        const references = await this.findAllMemberReferences(storeName, memberNames);
+        this.storeMembersReferenceCache.set(storeName, {
             references,
             timestamp: now
         });
@@ -557,7 +578,7 @@ export class StoreService {
 
     public invalidateReferenceCache(): void {
         this.referenceCache.clear();
-        this.memberReferenceCache.clear();
+        this.storeMembersReferenceCache.clear();
     }
 
     public dispose(): void {
