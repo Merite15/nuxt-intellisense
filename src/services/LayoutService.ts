@@ -208,7 +208,54 @@ export class LayoutService {
             }
         }
 
+        await this.findRouteRulesReferences(layoutName, results);
+
         return results;
+    }
+
+    /**
+     * Recherche les usages via `appLayout` dans un objet `routeRules` (Nitro, Nuxt
+     * 3.21+/4.3+), que celui-ci soit défini directement dans nuxt.config ou dans un
+     * fichier séparé (ex: app/config/route-rules.config.ts) importé ensuite dans la
+     * config. On scanne donc tout le projet, sans exclure les dossiers habituellement
+     * ignorés (comme `config/`), puisque ce pattern peut légitimement vivre là.
+     * Contrairement à `appMiddleware`, `appLayout` n'a pas de forme tableau : une route
+     * ne peut avoir qu'un seul layout.
+     */
+    private async findRouteRulesReferences(layoutName: string, results: vscode.Location[]): Promise<void> {
+        const uris = await vscode.workspace.findFiles(
+            '**/*.{ts,js}',
+            FileUtils.buildBaseExcludeGlob()
+        );
+
+        const appLayoutRegex = new RegExp(`appLayout\\s*:\\s*(['"\`])(${layoutName})\\1`, 'g');
+
+        for (const uri of uris) {
+            let content: string;
+            try {
+                content = fs.readFileSync(uri.fsPath, 'utf-8');
+            } catch (e) {
+                continue;
+            }
+
+            appLayoutRegex.lastIndex = 0;
+            let match;
+
+            while ((match = appLayoutRegex.exec(content)) !== null) {
+                const valueIndex = content.indexOf(match[1] + layoutName + match[1], match.index) + 1;
+
+                const start = TextUtils.indexToPosition(content, valueIndex);
+                const end = TextUtils.indexToPosition(content, valueIndex + layoutName.length);
+
+                results.push(new vscode.Location(
+                    uri,
+                    new vscode.Range(
+                        new vscode.Position(start.line, start.character),
+                        new vscode.Position(end.line, end.character)
+                    )
+                ));
+            }
+        }
     }
 
     // Méthode pour invalider le cache pour les tests ou un rafraîchissement manuel

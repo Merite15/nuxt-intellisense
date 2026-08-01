@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - `middleware`/`layout` usages declared in `definePageMeta({ ... })` were missed whenever an *earlier* property in the same object was itself a nested object (e.g. the newer `layout: { name, props }` form) — the regex used to isolate the `definePageMeta` object stopped at the first `}` it found, which belonged to the nested object, cutting off everything declared after it (including `middleware: '...'`). Parsing now walks balanced braces instead (new `TextUtils.extractBalancedBlock`). The object form of `layout` (`layout: { name: 'x', props: {...} }`) is also now detected, not just the plain string form.
 - Component usages inside `app.vue` and `error.vue` were never counted — these two files were explicitly skipped while scanning for component tags, even though `app.vue` routinely uses components (`<NuxtLayout>`, custom components, ...).
 - Middleware referenced via Nitro `routeRules`' `appMiddleware` (string or array form) was not detected at all, whether declared directly in `nuxt.config.ts` or in a separate file imported into it (e.g. `app/config/route-rules.config.ts`) — the search now covers this pattern project-wide, without excluding the normally-ignored `config/` folder for this specific case.
+- Same fix applied to layouts referenced via `routeRules`' `appLayout` (Nuxt 3.21+/4.3+).
 
 ## [0.8.0] - 2026-08-01
 

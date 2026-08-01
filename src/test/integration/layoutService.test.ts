@@ -96,4 +96,32 @@ definePageMeta({
         assert.strictEqual(lenses.length, 1);
         assert.match((lenses[0].command as any).title, /\$\(layout\) 1 reference/);
     });
+
+    it('detects a layout referenced via appLayout in routeRules, even inside a config/ folder', async () => {
+        const layoutsDir = path.join(tmpDir, 'layouts');
+        fs.mkdirSync(layoutsDir);
+        const layoutFile = path.join(layoutsDir, 'dashboard.vue');
+        fs.writeFileSync(
+            layoutFile,
+            `<script setup lang="ts">\n</script>\n<template><div><slot /></div></template>\n`
+        );
+
+        // config/ est normalement exclu de la recherche de références (composants,
+        // stores, ...) : ce test vérifie que routeRules reste détecté malgré ça.
+        const configDir = path.join(tmpDir, 'app', 'config');
+        fs.mkdirSync(configDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(configDir, 'route-rules.config.ts'),
+            `export const routeRulesConfig = {
+    '/dashboard/**': { ssr: false, appLayout: 'dashboard', robots: false },
+};
+`
+        );
+
+        const doc = makeDocument(layoutFile);
+        const lenses = await service.provideCodeLenses(doc);
+
+        assert.strictEqual(lenses.length, 1);
+        assert.match((lenses[0].command as any).title, /\$\(layout\) 1 reference/);
+    });
 });

@@ -40,7 +40,7 @@ code --install-extension MeriteK.nuxt-intellisense
   - 🧩 Vue/Nuxt components — including usages in `pages`, `app.vue`/`error.vue`, and both PascalCase/kebab-case tags
   - 🔄 Composables
   - 🗃️ Pinia stores (including individual methods, variables and getters)
-  - 🖼️ Layouts — both the plain string form (`layout: 'name'`) and the object form (`layout: { name, props }`)
+  - 🖼️ Layouts — via `definePageMeta` (plain string `layout: 'name'` or object form `layout: { name, props }`) and Nitro `routeRules`' `appLayout` (wherever that config file lives)
   - 🔌 Plugins (including custom directives)
   - 🔗 Middlewares — via `definePageMeta` (string or array), Nitro `routeRules`' `appMiddleware` (string or array, wherever that config file lives), and `.global.ts` files
   - 🌐 `server/api` and `server/routes` Nitro event handlers (including dynamic `[id]` segments and `.get`/`.post`/... method suffixes)
