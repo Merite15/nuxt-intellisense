@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PathUtils } from '../utils/pathUtils';
+import { FileUtils } from '../utils/fileUtils';
 
 interface ReferenceCache {
     references: vscode.Location[];
@@ -21,6 +22,8 @@ export class ComponentService {
     private dirsCacheTTL: number = 600000; // 10 minutes
     private fileWatcher: vscode.FileSystemWatcher | undefined;
     private initialized: boolean = false;
+    private duplicateNamesCache: { names: Map<string, string[]>, timestamp: number } | null = null;
+    private duplicateNamesCacheTTL: number = 600000; // 10 minutes, aligné sur le cache des répertoires
 
     constructor(
         private nuxtProjectRoot: string
@@ -81,6 +84,9 @@ export class ComponentService {
                 this.referenceCache.delete(key);
             });
         }
+
+        // Un fichier créé/déplacé/supprimé peut changer l'ensemble des noms en conflit
+        this.duplicateNamesCache = null;
     }
 
     async provideCodeLenses(document: vscode.TextDocument): Promise<vscode.CodeLens[]> {
@@ -112,6 +118,32 @@ export class ComponentService {
                 }
             }
         } else {
+        }
+
+        // Avertir si un autre composant du projet résout au même nom Nuxt
+        // (ex: components/ui/Button.vue et components/common/Button.vue -> "Button")
+        if (nuxtComponentName) {
+            const duplicates = await this.getCachedDuplicateComponentNames();
+            const conflictingPaths = (duplicates.get(nuxtComponentName) || [])
+                .filter(p => p !== document.uri.fsPath);
+
+            if (conflictingPaths.length > 0) {
+                const conflictLocations = conflictingPaths.map(
+                    p => new vscode.Location(vscode.Uri.file(p), new vscode.Position(0, 0))
+                );
+
+                lenses.push(
+                    new vscode.CodeLens(new vscode.Range(0, 0, 0, 0), {
+                        title: `$(warning) Nom "${nuxtComponentName}" en conflit avec ${conflictingPaths.length} autre${conflictingPaths.length > 1 ? 's' : ''} fichier${conflictingPaths.length > 1 ? 's' : ''}`,
+                        command: 'editor.action.showReferences',
+                        arguments: [
+                            document.uri,
+                            new vscode.Position(0, 0),
+                            conflictLocations
+                        ]
+                    })
+                );
+            }
         }
 
         const text = document.getText();
@@ -297,6 +329,53 @@ export class ComponentService {
     }
 
     /**
+     * Récupère (avec cache) la table des noms de composants Nuxt en conflit,
+     * c'est-à-dire résolus par plusieurs fichiers différents.
+     */
+    private async getCachedDuplicateComponentNames(): Promise<Map<string, string[]>> {
+        const now = Date.now();
+
+        if (this.duplicateNamesCache && (now - this.duplicateNamesCache.timestamp < this.duplicateNamesCacheTTL)) {
+            return this.duplicateNamesCache.names;
+        }
+
+        const names = await this.computeDuplicateComponentNames();
+
+        this.duplicateNamesCache = { names, timestamp: now };
+
+        return names;
+    }
+
+    private async computeDuplicateComponentNames(): Promise<Map<string, string[]>> {
+        const dirs = await this.getCachedComponentDirs();
+        const pathsByName = new Map<string, string[]>();
+
+        for (const dir of dirs) {
+            const files = await vscode.workspace.findFiles(new vscode.RelativePattern(dir, '**/*.vue'));
+
+            for (const file of files) {
+                const name = this.getNuxtComponentName(file.fsPath, dir);
+                if (!name) continue;
+
+                const paths = pathsByName.get(name) || [];
+                if (!paths.includes(file.fsPath)) {
+                    paths.push(file.fsPath);
+                }
+                pathsByName.set(name, paths);
+            }
+        }
+
+        const duplicates = new Map<string, string[]>();
+        for (const [name, paths] of pathsByName) {
+            if (paths.length > 1) {
+                duplicates.set(name, paths);
+            }
+        }
+
+        return duplicates;
+    }
+
+    /**
      * Recherche les références d'un composant spécifique
      */
     async findComponentReferences(
@@ -312,7 +391,7 @@ export class ComponentService {
 
         const uris = await vscode.workspace.findFiles(
             '**/*.vue',
-            '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**,**/utils/**,**/lib/**,**/helpers/**,**/constants/**,**/shared/**, **/public/**,**/config/**, **/assets/**}'
+            FileUtils.buildExcludeGlob()
         );
 
         // Traiter les fichiers par lots pour éviter les problèmes de mémoire
@@ -410,24 +489,16 @@ export class ComponentService {
             'dist',
             '.git',
             '.github',
-            'public',
-            'config',
-
-            // Dossiers utilitaires
-            'utils',
-            'lib',
-            'helpers',
-            'constants',
-            'shared',
 
             // Dossiers de stores
             'store',
             'stores',
 
-            'assets',
-
             // nuxt server
-            'server'
+            'server',
+
+            // Dossiers configurables (nuxt-intellisense.ignoredDirectories)
+            ...FileUtils.getIgnoredDirectories()
         ]);
 
         const pathSegments = fullPath.split(path.sep);
@@ -522,6 +593,8 @@ export class ComponentService {
         this.componentDirsCache = null;
 
         this.componentNameCache.clear();
+
+        this.duplicateNamesCache = null;
     }
 
     // S'assurer que les ressources sont libérées lorsqu'elles ne sont plus nécessaires

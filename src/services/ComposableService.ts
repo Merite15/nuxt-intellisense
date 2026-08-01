@@ -294,7 +294,7 @@ export class ComposableService {
 
         const uris = await vscode.workspace.findFiles(
             '**/*.{vue,js,ts}',
-            '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**, **/utils/**,**/lib/**,**/helpers/**,**/constants/**,**/shared/**, **/public/**,**/config/**, **/assets/**}'
+            FileUtils.buildExcludeGlob()
         );
 
         const batchSize = 30;
@@ -477,7 +477,7 @@ export class ComposableService {
             if (results.length < 5) {
                 const uris = await vscode.workspace.findFiles(
                     '**/*.{vue,js,ts}',
-                    '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**, **/utils/**,**/lib/**,**/helpers/**,**/constants/**,**/shared/**, **/public/**,**/config/**, **/assets/**}'
+                    FileUtils.buildExcludeGlob()
                 );
 
                 const fileReadPromises = uris.map(async (uri) => {

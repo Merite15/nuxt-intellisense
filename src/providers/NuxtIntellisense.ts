@@ -8,6 +8,7 @@ import { MiddlewareService } from '../services/MiddlewareService';
 import { LayoutService } from '../services/LayoutService';
 import { StoreService } from '../services/StoreService';
 import { UtilsService } from '../services/UtilsService';
+import { ServerApiService } from '../services/ServerApiService';
 import { FileUtils } from '../utils/fileUtils';
 import { NuxtComponentInfo } from '../types';
 
@@ -16,6 +17,9 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
     private autoImportCache: Map<string, NuxtComponentInfo[]> = new Map();
     private lastCacheUpdate: number = 0;
     private cacheUpdateInterval: number = 30000;
+
+    private readonly unusedDiagnostics: vscode.DiagnosticCollection =
+        vscode.languages.createDiagnosticCollection('nuxt-intellisense-unused');
 
     private componentService?: ComponentService;
 
@@ -31,6 +35,8 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
 
     private utilsService?: UtilsService;
 
+    private serverApiService?: ServerApiService;
+
     private initializeServices() {
         if (this.nuxtProjectRoot) {
             this.componentService = new ComponentService(this.nuxtProjectRoot);
@@ -40,6 +46,7 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
             this.layoutService = new LayoutService();
             this.storeService = new StoreService(this.autoImportCache);
             this.utilsService = new UtilsService(this.nuxtProjectRoot);
+            this.serverApiService = new ServerApiService();
         }
     }
 
@@ -97,6 +104,12 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
                 const storeLenses = await this.storeService.provideCodeLenses(document);
 
                 lenses.push(...storeLenses);
+            }
+
+            if (fileInfo.isServerApi && this.serverApiService) {
+                const serverApiLenses = await this.serverApiService.provideCodeLenses(document);
+
+                lenses.push(...serverApiLenses);
             }
 
             if (fileInfo.isUtil && this.utilsService) {
@@ -161,7 +174,44 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
             console.error('Error providing code lenses:', error);
         }
 
+        this.updateUnusedDiagnostics(document, lenses);
+
         return lenses;
+    }
+
+    /**
+     * Signale dans le panneau Problems les symboles dont le CodeLens annonce
+     * "0 reference(s)" : ils sont probablement du code mort. On réutilise le texte déjà
+     * calculé par les services plutôt que de refaire un calcul dédié.
+     */
+    private updateUnusedDiagnostics(document: vscode.TextDocument, lenses: vscode.CodeLens[]): void {
+        const config = vscode.workspace.getConfiguration('nuxt-intellisense');
+        if (!config.get('showUnusedWarnings', true)) {
+            this.unusedDiagnostics.delete(document.uri);
+            return;
+        }
+
+        const zeroReferencePattern = /\b0 references?\b/;
+        const diagnostics: vscode.Diagnostic[] = [];
+
+        for (const lens of lenses) {
+            const title = lens.command?.title;
+            if (!title || !zeroReferencePattern.test(title)) {
+                continue;
+            }
+
+            const line = lens.range.start.line;
+            const lineLength = line < document.lineCount ? document.lineAt(line).text.length : 0;
+            const range = new vscode.Range(line, 0, line, lineLength);
+
+            diagnostics.push(new vscode.Diagnostic(
+                range,
+                'Nuxt Intellisense : aucune référence trouvée dans le projet pour ce symbole.',
+                vscode.DiagnosticSeverity.Hint
+            ));
+        }
+
+        this.unusedDiagnostics.set(document.uri, diagnostics);
     }
 
     private getFileInfo(document: vscode.TextDocument) {
@@ -181,6 +231,7 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
             isMiddleware: hasSegment('middleware'),
             isLayout: hasSegment('layouts'),
             isStore: hasSegment('stores', 'store'),
+            isServerApi: hasSegment('server') && hasSegment('api', 'routes'),
             isUtil: hasSegment('utils', 'lib', 'services', 'types', 'helpers', 'constants', 'schemas', 'validationSchemas')
         };
     }
@@ -246,5 +297,7 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
         this.layoutService?.dispose();
         this.storeService?.dispose();
         this.utilsService?.dispose();
+        this.serverApiService?.dispose();
+        this.unusedDiagnostics.dispose();
     }
 }

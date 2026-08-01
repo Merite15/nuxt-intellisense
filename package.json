@@ -52,6 +52,19 @@
           "type": "boolean",
           "default": true,
           "description": "Show welcome message when the extension is activated"
+        },
+        "nuxt-intellisense.showUnusedWarnings": {
+          "type": "boolean",
+          "default": true,
+          "description": "Report symbols with 0 detected references as hints in the Problems panel"
+        },
+        "nuxt-intellisense.ignoredDirectories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": ["utils", "lib", "helpers", "constants", "shared", "public", "config", "assets"],
+          "description": "Directory names excluded from component/composable/store reference search (in addition to node_modules, .nuxt, .output and dist, which are always excluded)"
         }
       }
     },
@@ -63,8 +76,32 @@
       {
         "command": "nuxt-intellisense.showDocumentation",
         "title": "Show Nuxt Intellisense Documentation"
+      },
+      {
+        "command": "nuxt-intellisense.refreshExplorer",
+        "title": "Refresh Nuxt Explorer",
+        "icon": "$(refresh)"
       }
-    ]
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "nuxtIntellisenseExplorer",
+          "name": "Nuxt Structure",
+          "icon": "images/logo.png",
+          "contextualTitle": "Nuxt Intellisense"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "nuxt-intellisense.refreshExplorer",
+          "when": "view == nuxtIntellisenseExplorer",
+          "group": "navigation"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import { NuxtIntellisense } from './providers/NuxtIntellisense';
+import { NuxtExplorerProvider } from './providers/NuxtExplorerProvider';
+import { FileUtils } from './utils/fileUtils';
 
 export async function activate(context: vscode.ExtensionContext) {
   const codeLensProvider = new NuxtIntellisense();
@@ -15,6 +17,19 @@ export async function activate(context: vscode.ExtensionContext) {
     ),
     codeLensProvider
   );
+
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+
+  if (workspaceFolder) {
+    const nuxtProjectRoot = FileUtils.findNuxtProjectRoot(workspaceFolder.uri.fsPath) ?? workspaceFolder.uri.fsPath;
+
+    const explorerProvider = new NuxtExplorerProvider(nuxtProjectRoot);
+
+    context.subscriptions.push(
+      vscode.window.registerTreeDataProvider('nuxtIntellisenseExplorer', explorerProvider),
+      vscode.commands.registerCommand('nuxt-intellisense.refreshExplorer', () => explorerProvider.refresh())
+    );
+  }
 
   const disposableCommands = [
     vscode.commands.registerCommand('nuxt-intellisense.refreshCodeLens', () => {

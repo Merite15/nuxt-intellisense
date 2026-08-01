@@ -223,7 +223,7 @@ export class StoreService {
 
             const uris = await vscode.workspace.findFiles(
                 '**/*.{vue,js,ts}',
-                '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**,**/utils/**,**/lib/**,**/helpers/**,**/constants/**,**/shared/**, **/public/**,**/config/**, **/assets/**}'
+                FileUtils.buildExcludeGlob()
             );
 
             const results: vscode.Location[] = [];
@@ -334,7 +334,7 @@ export class StoreService {
 
         const uris = await vscode.workspace.findFiles(
             '**/*.{vue,js,ts}',
-            '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**,**/utils/**,**/lib/**,**/helpers/**,**/constants/**,**/shared/**,**/public/**,**/config/**,**/assets/**}'
+            FileUtils.buildExcludeGlob()
         );
 
         const storeAliasPatterns: string[] = [];
@@ -438,7 +438,7 @@ export class StoreService {
 
         const files = await vscode.workspace.findFiles(
             new vscode.RelativePattern(dir, '**/*.{ts,js}'),
-            '{**/node_modules/**,**/.nuxt/**,**/.output/**,**/dist/**,**/utils/**,**/lib/**,**/helpers/**,**/constants/**,**/shared/**, **/public/**,**/config/**, **/assets/**}'
+            FileUtils.buildExcludeGlob()
         );
 
         for (const file of files) {
