@@ -4,7 +4,23 @@ import * as os from 'os';
 import * as path from 'path';
 import { StoreService } from '../../services/StoreService';
 import { NuxtComponentInfo } from '../../types';
-import { resetMock, setFixtureRoot } from '../mocks/vscode';
+import { Position, Uri, resetMock, setFixtureRoot } from '../mocks/vscode';
+
+function makeDocument(fsPath: string) {
+    const text = fs.readFileSync(fsPath, 'utf-8');
+    const uri = Uri.file(fsPath);
+
+    return {
+        uri,
+        fileName: fsPath,
+        getText: () => text,
+        positionAt(offset: number) {
+            const before = text.slice(0, offset);
+            const lines = before.split('\n');
+            return new Position(lines.length - 1, lines[lines.length - 1].length);
+        }
+    } as any;
+}
 
 describe('StoreService (integration)', () => {
     let tmpDir: string;
@@ -77,5 +93,32 @@ export const useSettingsStore = defineStore('settings', () => ({}));
         await service.scanStoresDirectory(storesDir);
         const namesAfterRescan = (cache.get('stores') || []).map(s => s.name).sort();
         assert.deepStrictEqual(namesAfterRescan, ['settings', 'user']);
+    });
+
+    it('flags two stores that define the same Pinia id', async () => {
+        const storesDir = path.join(tmpDir, 'stores');
+        fs.mkdirSync(storesDir);
+        fs.writeFileSync(
+            path.join(storesDir, 'user.ts'),
+            `import { defineStore } from 'pinia';\nexport const useUserStore = defineStore('user', () => ({}));\n`
+        );
+
+        const adminDir = path.join(storesDir, 'admin');
+        fs.mkdirSync(adminDir);
+        const adminStoreFile = path.join(adminDir, 'user.ts');
+        fs.writeFileSync(
+            adminStoreFile,
+            `import { defineStore } from 'pinia';\nexport const useAdminUserStore = defineStore('user', () => ({}));\n`
+        );
+
+        await service.scanStoresDirectory(storesDir);
+        await service.scanStoresDirectory(adminDir);
+
+        const doc = makeDocument(adminStoreFile);
+        const lenses = await service.provideCodeLenses(doc);
+
+        const conflictLens = lenses.find(l => /\$\(warning\)/.test((l.command as any)?.title ?? ''));
+        assert.ok(conflictLens, 'expected a duplicate store id warning lens');
+        assert.match((conflictLens!.command as any).title, /"user"/);
     });
 });

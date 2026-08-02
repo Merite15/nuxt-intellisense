@@ -22,8 +22,10 @@ export class ComposableService {
     private fileWatcher: vscode.FileSystemWatcher | undefined;
     private exposedItemsCache: Map<string, ExposedItem[]> = new Map();
     private documentMemberReferenceCache: Map<string, { references: Map<string, vscode.Location[]>, timestamp: number }> = new Map();
+    private duplicateNamesCache: { names: Map<string, string[]>, timestamp: number } | null = null;
+    private duplicateNamesCacheTTL: number = 600000; // 10 minutes
 
-    constructor() {
+    constructor(private nuxtProjectRoot: string) {
         this.setupFileWatcher();
     }
 
@@ -44,6 +46,7 @@ export class ComposableService {
             }
             this.invalidateReferenceCache();
             this.exposedItemsCache.clear();
+            this.duplicateNamesCache = null;
         };
 
         this.fileWatcher.onDidChange(onFileEvent);
@@ -65,7 +68,32 @@ export class ComposableService {
         // workspace (au lieu d'un scan complet par item) — voir getCachedMemberReferences.
         const memberReferences = await this.getCachedMemberReferences(document, exposedItems);
 
+        const duplicateNames = await this.getCachedDuplicateComposableNames();
+
         for (const item of exposedItems) {
+            if (item.type === 'composable') {
+                const conflictingPaths = (duplicateNames.get(item.name) || [])
+                    .filter(p => p !== document.uri.fsPath);
+
+                if (conflictingPaths.length > 0) {
+                    const conflictLocations = conflictingPaths.map(
+                        p => new vscode.Location(vscode.Uri.file(p), new vscode.Position(0, 0))
+                    );
+
+                    lenses.push(
+                        new vscode.CodeLens(new vscode.Range(item.position.line, 0, item.position.line, 0), {
+                            title: `$(warning) Composable "${item.name}" en conflit avec ${conflictingPaths.length} autre${conflictingPaths.length > 1 ? 's' : ''} fichier${conflictingPaths.length > 1 ? 's' : ''}`,
+                            command: 'editor.action.showReferences',
+                            arguments: [
+                                document.uri,
+                                item.position,
+                                conflictLocations
+                            ]
+                        })
+                    );
+                }
+            }
+
             const references = item.type === 'composable'
                 ? await this.getCachedReferences(
                     `${document.uri.toString()}:${item.name}`,
@@ -262,6 +290,69 @@ export class ComposableService {
 
     private itemKey(item: ExposedItem): string {
         return `${item.name}:${item.composableName ?? ''}`;
+    }
+
+    /**
+     * Récupère (avec cache) la table des noms de composables en conflit. Contrairement
+     * aux composants (nommés d'après leur chemin de fichier), un composable Nuxt est
+     * auto-importé par le nom de sa fonction exportée : deux fichiers différents qui
+     * exportent tous deux `useAuth` entrent donc en conflit, quel que soit leur chemin.
+     */
+    private async getCachedDuplicateComposableNames(): Promise<Map<string, string[]>> {
+        const now = Date.now();
+
+        if (this.duplicateNamesCache && (now - this.duplicateNamesCache.timestamp < this.duplicateNamesCacheTTL)) {
+            return this.duplicateNamesCache.names;
+        }
+
+        const names = await this.computeDuplicateComposableNames();
+
+        this.duplicateNamesCache = { names, timestamp: now };
+
+        return names;
+    }
+
+    private async computeDuplicateComposableNames(): Promise<Map<string, string[]>> {
+        const dirs = await FileUtils.findAllDirsByName(this.nuxtProjectRoot, 'composables');
+        const pathsByName = new Map<string, string[]>();
+
+        const composableExportRegex = /export\s+(default\s+)?(const|function|async\s+function)\s+(\w+)/g;
+
+        for (const dir of dirs) {
+            const files = await vscode.workspace.findFiles(new vscode.RelativePattern(dir, '**/*.{ts,js}'));
+
+            for (const file of files) {
+                let content: string;
+                try {
+                    content = fs.readFileSync(file.fsPath, 'utf-8');
+                } catch {
+                    continue;
+                }
+
+                composableExportRegex.lastIndex = 0;
+                let match: RegExpExecArray | null;
+
+                while ((match = composableExportRegex.exec(content)) !== null) {
+                    const name = match[3];
+                    const paths = pathsByName.get(name) || [];
+
+                    if (!paths.includes(file.fsPath)) {
+                        paths.push(file.fsPath);
+                    }
+
+                    pathsByName.set(name, paths);
+                }
+            }
+        }
+
+        const duplicates = new Map<string, string[]>();
+        for (const [name, paths] of pathsByName) {
+            if (paths.length > 1) {
+                duplicates.set(name, paths);
+            }
+        }
+
+        return duplicates;
     }
 
     /**

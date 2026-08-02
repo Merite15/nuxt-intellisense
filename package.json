@@ -3,7 +3,7 @@
   "license": "MIT",
   "displayName": "Nuxt Intellisense",
   "description": "Enhanced IntelliSense for Nuxt3 projects",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "publisher": "MeriteK",
   "changelog": "CHANGELOG.md",
   "engines": {
@@ -57,6 +57,11 @@
           "type": "boolean",
           "default": true,
           "description": "Report symbols with 0 detected references as hints in the Problems panel"
+        },
+        "nuxt-intellisense.showPhantomReferenceErrors": {
+          "type": "boolean",
+          "default": true,
+          "description": "Report middleware/layout names referenced in definePageMeta that don't match any file in the project (likely typos) as warnings in the Problems panel"
         },
         "nuxt-intellisense.ignoredDirectories": {
           "type": "array",

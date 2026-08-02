@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.4] - 2026-08-01
+
+### Added
+
+- **Phantom reference detection**: a new `PageMetaValidationService` flags `middleware`/`layout` names referenced in `definePageMeta` (string, array, or object form) or in `routeRules`' `appMiddleware`/`appLayout` that don't match any file found in the project, as a warning in the Problems panel — catches typos in these plain-string references, the mirror image of the existing "0 references" dead-code detection. Toggle with `nuxt-intellisense.showPhantomReferenceErrors`. Correctly excludes `.global.ts` middleware, which is never referenced by name.
+- **Duplicate name detection extended to composables and stores** (previously components only): composables are auto-imported by their exported function name rather than by file path, so two different files exporting the same name (e.g. two `useAuth`) now trigger a conflict warning; similarly, two `defineStore(...)` calls sharing the same store id — even across unrelated files — are now flagged.
+
 ## [0.8.3] - 2026-08-01
 
 ### Fixed

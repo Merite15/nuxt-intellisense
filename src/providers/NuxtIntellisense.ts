@@ -8,6 +8,7 @@ import { LayoutService } from '../services/LayoutService';
 import { StoreService } from '../services/StoreService';
 import { UtilsService } from '../services/UtilsService';
 import { ServerApiService } from '../services/ServerApiService';
+import { PageMetaValidationService } from '../services/PageMetaValidationService';
 import { FileUtils } from '../utils/fileUtils';
 import { NuxtComponentInfo } from '../types';
 
@@ -19,6 +20,9 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
 
     private readonly unusedDiagnostics: vscode.DiagnosticCollection =
         vscode.languages.createDiagnosticCollection('nuxt-intellisense-unused');
+
+    private readonly phantomReferenceDiagnostics: vscode.DiagnosticCollection =
+        vscode.languages.createDiagnosticCollection('nuxt-intellisense-phantom-reference');
 
     private componentService?: ComponentService;
 
@@ -36,16 +40,19 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
 
     private serverApiService?: ServerApiService;
 
+    private pageMetaValidationService?: PageMetaValidationService;
+
     private initializeServices() {
         if (this.nuxtProjectRoot) {
             this.componentService = new ComponentService(this.nuxtProjectRoot);
-            this.composableService = new ComposableService();
+            this.composableService = new ComposableService(this.nuxtProjectRoot);
             this.pluginService = new PluginService();
             this.middlewareService = new MiddlewareService();
             this.layoutService = new LayoutService();
             this.storeService = new StoreService(this.autoImportCache);
             this.utilsService = new UtilsService(this.nuxtProjectRoot);
             this.serverApiService = new ServerApiService();
+            this.pageMetaValidationService = new PageMetaValidationService(this.nuxtProjectRoot);
         }
     }
 
@@ -169,6 +176,11 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
                     );
                 }
             }
+            if (fileInfo.isPage && this.pageMetaValidationService) {
+                await this.updatePhantomReferenceDiagnostics(document);
+            } else {
+                this.phantomReferenceDiagnostics.delete(document.uri);
+            }
         } catch (error) {
             console.error('Error providing code lenses:', error);
         }
@@ -176,6 +188,22 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
         this.updateUnusedDiagnostics(document, lenses);
 
         return lenses;
+    }
+
+    /**
+     * Signale les middleware/layout référencés par leur nom dans `definePageMeta`
+     * mais introuvables dans le projet (faute de frappe la plupart du temps).
+     */
+    private async updatePhantomReferenceDiagnostics(document: vscode.TextDocument): Promise<void> {
+        const config = vscode.workspace.getConfiguration('nuxt-intellisense');
+        if (!config.get('showPhantomReferenceErrors', true) || !this.pageMetaValidationService) {
+            this.phantomReferenceDiagnostics.delete(document.uri);
+            return;
+        }
+
+        const diagnostics = await this.pageMetaValidationService.validateDocument(document);
+
+        this.phantomReferenceDiagnostics.set(document.uri, diagnostics);
     }
 
     /**
@@ -231,6 +259,7 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
             isLayout: hasSegment('layouts'),
             isStore: hasSegment('stores', 'store'),
             isServerApi: hasSegment('server') && hasSegment('api', 'routes'),
+            isPage: hasSegment('pages'),
             isUtil: hasSegment('utils', 'lib', 'services', 'types', 'helpers', 'constants', 'schemas', 'validationSchemas')
         };
     }
@@ -265,6 +294,8 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
         this.storeService?.dispose();
         this.utilsService?.dispose();
         this.serverApiService?.dispose();
+        this.pageMetaValidationService?.dispose();
         this.unusedDiagnostics.dispose();
+        this.phantomReferenceDiagnostics.dispose();
     }
 }

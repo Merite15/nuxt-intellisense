@@ -51,7 +51,11 @@ Detection follows path **segments**, not a fixed root, so it works the same whet
 ### 🩺 Code Health
 
 - **Unused symbol detection**: any symbol with 0 detected references is flagged as a hint in the Problems panel, so dead exports are easy to spot without leaving the editor.
-- **Duplicate component name detection**: warns when two different `.vue` files resolve to the same Nuxt auto-import name (e.g. `components/ui/Button.vue` and `components/common/Button.vue` both resolving to `Button`), with a one-click link to the conflicting files.
+- **Phantom reference detection**: the inverse problem — a `middleware`/`layout` name referenced in `definePageMeta` (string, array, or object form) or in `routeRules`' `appMiddleware`/`appLayout` that doesn't match any actual file is flagged as a warning in the Problems panel. Catches typos (`middleware: 'atuh'`) that TypeScript can't see, since these are plain strings.
+- **Duplicate name detection**: warns when two different files would collide under Nuxt's auto-import rules, with a one-click link to the conflicting files —
+  - **components**: two `.vue` files resolving to the same Nuxt component name (e.g. `components/ui/Button.vue` and `components/common/Button.vue` both resolving to `Button`);
+  - **composables**: two files exporting a function/const with the same name (composables are auto-imported by function name, not file path);
+  - **stores**: two `defineStore(...)` calls using the same store id, regardless of which file they're in.
 
 ### 🗂️ Nuxt Structure Explorer
 
@@ -78,6 +82,7 @@ A collapsible **"Nuxt Structure"** section is added to the built-in VS Code **Ex
 |---|---|---|
 | `nuxt-intellisense.showWelcomeMessage` | `true` | Show the welcome message when the extension activates. |
 | `nuxt-intellisense.showUnusedWarnings` | `true` | Report symbols with 0 detected references as hints in the Problems panel. |
+| `nuxt-intellisense.showPhantomReferenceErrors` | `true` | Report middleware/layout names referenced in `definePageMeta` that don't match any file in the project (likely typos) as warnings in the Problems panel. |
 | `nuxt-intellisense.ignoredDirectories` | `["utils","lib","helpers","constants","shared","public","config","assets"]` | Directory names excluded from component/composable/store reference search, on top of `node_modules`, `.nuxt`, `.output` and `dist` (always excluded). Adjust this if your project uses a different folder layout. |
 
 ## 📟 Commands

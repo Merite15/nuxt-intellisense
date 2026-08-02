@@ -64,8 +64,34 @@ export class StoreService {
             const referenceCount = uniqueReferences.length;
 
             // Trouver les informations du store dans le cache
-            const storeInfo = this.autoImportCache.get('stores')?.find(s => s.name === storeName);
+            const allStores = this.autoImportCache.get('stores') || [];
+            const storeInfo = allStores.find(s => s.name === storeName);
 
+            // Deux fichiers différents peuvent appeler defineStore avec le même id ;
+            // Pinia n'en garderait qu'un seul en pratique (collision d'auto-import).
+            const conflictingPaths = [...new Set(
+                allStores
+                    .filter(s => s.name === storeName && s.path !== document.uri.fsPath)
+                    .map(s => s.path)
+            )];
+
+            if (conflictingPaths.length > 0) {
+                const conflictLocations = conflictingPaths.map(
+                    p => new vscode.Location(vscode.Uri.file(p), new vscode.Position(0, 0))
+                );
+
+                lenses.push(
+                    new vscode.CodeLens(range, {
+                        title: `$(warning) Store "${storeName}" en conflit avec ${conflictingPaths.length} autre${conflictingPaths.length > 1 ? 's' : ''} fichier${conflictingPaths.length > 1 ? 's' : ''}`,
+                        command: 'editor.action.showReferences',
+                        arguments: [
+                            document.uri,
+                            pos,
+                            conflictLocations
+                        ]
+                    })
+                );
+            }
 
             let memberDetails = [];
 
