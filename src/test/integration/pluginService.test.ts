@@ -71,6 +71,63 @@ export const useUserStore = defineStore('user', () => {
         assert.match((lenses[0].command as any).title, /\$\(plug\) 1 reference/);
     });
 
+    it('counts a usage of a shorthand `provide: { key }` object property (no colon, destructured as $key)', async () => {
+        const pluginsDir = path.join(tmpDir, 'plugins');
+        fs.mkdirSync(pluginsDir);
+        fs.writeFileSync(
+            path.join(pluginsDir, 'scroll.ts'),
+            `export default defineNuxtPlugin(() => {
+  const scrollToElement = () => {};
+
+  return {
+    provide: {
+      scrollToElement,
+    },
+  };
+});
+`
+        );
+
+        const composablesDir = path.join(tmpDir, 'composables');
+        fs.mkdirSync(composablesDir);
+        fs.writeFileSync(
+            path.join(composablesDir, 'useFormSubmission.ts'),
+            `export function useFormSubmission() {
+  const { $scrollToElement } = useNuxtApp();
+  $scrollToElement();
+}
+`
+        );
+
+        const doc = makeDocument(path.join(pluginsDir, 'scroll.ts'));
+        const lenses = await service.provideCodeLenses(doc);
+
+        assert.strictEqual(lenses.length, 1);
+        assert.match((lenses[0].command as any).title, /\$\(plug\) 1 reference/);
+    });
+
+    it('does not report "0 references" for a plugin that only registers a Vue dependency (nuxtApp.vueApp.use)', async () => {
+        const pluginsDir = path.join(tmpDir, 'plugins');
+        fs.mkdirSync(pluginsDir);
+        fs.writeFileSync(
+            path.join(pluginsDir, 'apexcharts.ts'),
+            `import VueApexCharts from "vue3-apexcharts";
+
+export default defineNuxtPlugin((nuxtApp) => {
+    nuxtApp.vueApp.use(VueApexCharts);
+});
+`
+        );
+
+        const doc = makeDocument(path.join(pluginsDir, 'apexcharts.ts'));
+        const lenses = await service.provideCodeLenses(doc);
+
+        assert.strictEqual(lenses.length, 1);
+        const title = (lenses[0].command as any).title;
+        assert.doesNotMatch(title, /\b0 references?\b/);
+        assert.match(title, /Enregistré automatiquement/);
+    });
+
     it('flags two plugins that provide the same key', async () => {
         const pluginsDir = path.join(tmpDir, 'plugins');
         fs.mkdirSync(pluginsDir);

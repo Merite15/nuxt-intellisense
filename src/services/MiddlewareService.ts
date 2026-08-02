@@ -79,6 +79,10 @@ export class MiddlewareService {
                             : undefined
                     })
                 );
+
+                if (referenceCount === 0) {
+                    lenses.push(TextUtils.buildSearchInWorkspaceLens(range, middlewareName));
+                }
             }
         }
 
@@ -194,15 +198,13 @@ export class MiddlewareService {
                     continue;
                 }
 
-                const metaStartIndex = metaMatch.index;
-
                 // Recherche middleware unique
                 const singleMiddlewareRegex = new RegExp(`middleware\\s*:\\s*(['"\`])(${middlewareName})\\1`, 'g');
                 let singleMatch;
 
                 while ((singleMatch = singleMiddlewareRegex.exec(metaContent)) !== null) {
                     const middlewareValueIndex = metaContent.indexOf(singleMatch[1] + middlewareName + singleMatch[1], singleMatch.index);
-                    const exactIndex = metaStartIndex + middlewareValueIndex + 1;
+                    const exactIndex = braceOpenIndex + middlewareValueIndex + 1;
 
                     const start = TextUtils.indexToPosition(content, exactIndex);
                     const end = TextUtils.indexToPosition(content, exactIndex + middlewareName.length);
@@ -228,7 +230,7 @@ export class MiddlewareService {
                     while ((itemMatch = itemRegex.exec(arrayContent)) !== null) {
                         const arrayStartIndex = metaContent.indexOf(arrayContent, arrayMatch.index);
                         const middlewareInArrayIndex = arrayContent.indexOf(itemMatch[0]);
-                        const exactIndex = metaStartIndex + arrayStartIndex + middlewareInArrayIndex + 1;
+                        const exactIndex = braceOpenIndex + arrayStartIndex + middlewareInArrayIndex + 1;
 
                         const start = TextUtils.indexToPosition(content, exactIndex);
                         const end = TextUtils.indexToPosition(content, exactIndex + middlewareName.length);

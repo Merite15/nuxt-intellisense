@@ -74,6 +74,41 @@ definePageMeta({
         assert.match((lenses[0].command as any).title, /\$\(link\) 1 reference/);
     });
 
+    it('points the reference range at the middleware name itself, not the `middleware:` key (offset bug)', async () => {
+        const middlewareDir = path.join(tmpDir, 'middleware');
+        fs.mkdirSync(middlewareDir);
+        const middlewareFile = path.join(middlewareDir, 'has-company.ts');
+        fs.writeFileSync(
+            middlewareFile,
+            `export default defineNuxtRouteMiddleware((to) => {});\n`
+        );
+
+        const pagesDir = path.join(tmpDir, 'pages');
+        fs.mkdirSync(pagesDir);
+        const pageContent = `<script setup lang="ts">
+definePageMeta({
+    middleware: 'has-company'
+})
+</script>
+<template><div /></template>
+`;
+        fs.writeFileSync(path.join(pagesDir, 'index.vue'), pageContent);
+
+        const doc = makeDocument(middlewareFile);
+        const lenses = await service.provideCodeLenses(doc);
+
+        assert.strictEqual(lenses.length, 1);
+        assert.match((lenses[0].command as any).title, /\$\(link\) 1 reference/);
+
+        const [, , references] = (lenses[0].command as any).arguments;
+        const range = references[0].range;
+
+        const lines = pageContent.split('\n');
+        const referencedText = lines[range.start.line].slice(range.start.character, range.end.character);
+
+        assert.strictEqual(referencedText, 'has-company');
+    });
+
     it('detects a middleware referenced via appMiddleware in a routeRules array, even inside a config/ folder', async () => {
         const middlewareDir = path.join(tmpDir, 'middleware');
         fs.mkdirSync(middlewareDir);
@@ -101,5 +136,26 @@ definePageMeta({
 
         assert.strictEqual(lenses.length, 1);
         assert.match((lenses[0].command as any).title, /\$\(link\) 2 references/);
+    });
+
+    it('offers a "search in workspace" lens next to a 0-reference middleware', async () => {
+        const middlewareDir = path.join(tmpDir, 'middleware');
+        fs.mkdirSync(middlewareDir);
+        const middlewareFile = path.join(middlewareDir, 'has-company.ts');
+        fs.writeFileSync(
+            middlewareFile,
+            `export default defineNuxtRouteMiddleware((to) => {});\n`
+        );
+
+        const doc = makeDocument(middlewareFile);
+        const lenses = await service.provideCodeLenses(doc);
+
+        assert.strictEqual(lenses.length, 2);
+        assert.match((lenses[0].command as any).title, /\$\(link\) 0 reference/);
+
+        const searchLens = lenses[1].command as any;
+        assert.match(searchLens.title, /\$\(search\)/);
+        assert.strictEqual(searchLens.command, 'workbench.action.findInFiles');
+        assert.strictEqual(searchLens.arguments[0].query, 'has-company');
     });
 });

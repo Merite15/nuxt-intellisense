@@ -75,6 +75,10 @@ export class LayoutService {
                             : undefined
                     })
                 );
+
+                if (referenceCount === 0) {
+                    lenses.push(TextUtils.buildSearchInWorkspaceLens(range, layoutName));
+                }
             }
         } else {
         }
@@ -124,9 +128,11 @@ export class LayoutService {
                 let match;
 
                 while ((match = regex.exec(content)) !== null) {
-                    const start = TextUtils.indexToPosition(content, match.index);
+                    const valueIndex = content.indexOf(match[1] + layoutName + match[1], match.index) + 1;
 
-                    const end = TextUtils.indexToPosition(content, match.index + match[0].length);
+                    const start = TextUtils.indexToPosition(content, valueIndex);
+
+                    const end = TextUtils.indexToPosition(content, valueIndex + layoutName.length);
 
                     results.push(new vscode.Location(
                         uri,

@@ -95,6 +95,34 @@ definePageMeta({
 
         assert.strictEqual(lenses.length, 1);
         assert.match((lenses[0].command as any).title, /\$\(layout\) 1 reference/);
+
+        // The reference range must cover only the layout name ("admin"), not the whole
+        // `layout: 'admin'` key/value text - otherwise "Go to references" highlights far
+        // more than the actual name.
+        const [, , references] = (lenses[0].command as any).arguments;
+        const range = references[0].range;
+        assert.strictEqual(range.end.character - range.start.character, 'admin'.length);
+    });
+
+    it('offers a "search in workspace" lens next to a 0-reference layout', async () => {
+        const layoutsDir = path.join(tmpDir, 'layouts');
+        fs.mkdirSync(layoutsDir);
+        const layoutFile = path.join(layoutsDir, 'unused.vue');
+        fs.writeFileSync(
+            layoutFile,
+            `<script setup lang="ts">\n</script>\n<template><div><slot /></div></template>\n`
+        );
+
+        const doc = makeDocument(layoutFile);
+        const lenses = await service.provideCodeLenses(doc);
+
+        assert.strictEqual(lenses.length, 2);
+        assert.match((lenses[0].command as any).title, /\$\(layout\) 0 reference/);
+
+        const searchLens = lenses[1].command as any;
+        assert.match(searchLens.title, /\$\(search\)/);
+        assert.strictEqual(searchLens.command, 'workbench.action.findInFiles');
+        assert.strictEqual(searchLens.arguments[0].query, 'unused');
     });
 
     it('detects a layout referenced via appLayout in routeRules, even inside a config/ folder', async () => {

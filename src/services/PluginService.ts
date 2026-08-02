@@ -62,6 +62,23 @@ export class PluginService {
 
             const range = new vscode.Range(pos.line, 0, pos.line, 0);
 
+            // Un plugin qui n'expose ni `provide` ni `directive` (ex: un plugin qui se
+            // contente d'appeler `nuxtApp.vueApp.use(...)` pour enregistrer une dépendance
+            // globale) n'a rien qu'un autre fichier puisse référencer par nom : Nuxt
+            // l'applique automatiquement, comme server/middleware et server/plugins. Compter
+            // des "références" n'a alors pas de sens et affichait à tort "0 references",
+            // signalé comme du code potentiellement mort.
+            if (!this.pluginExposesApi(text)) {
+                lenses.push(
+                    new vscode.CodeLens(range, {
+                        title: '$(plug) Enregistré automatiquement par Nuxt (aucune API exposée à référencer)',
+                        command: ''
+                    })
+                );
+
+                continue;
+            }
+
             const pluginName = path.basename(document.fileName, path.extname(document.fileName));
 
             // Use cache for references
@@ -131,6 +148,20 @@ export class PluginService {
                 })
             );
         }
+    }
+
+    /**
+     * Un plugin "expose une API" s'il fournit au moins une clé `provide` ou une directive
+     * Vue — c'est-à-dire quelque chose qu'un autre fichier peut référencer explicitement
+     * par nom. Un plugin qui se contente d'un `nuxtApp.vueApp.use(...)` (enregistrement
+     * d'une dépendance globale) n'expose rien de tel.
+     */
+    private pluginExposesApi(content: string): boolean {
+        if (this.extractProvideKeys(content).size > 0) {
+            return true;
+        }
+
+        return /nuxtApp\.vueApp\.directive\s*\(/.test(content);
     }
 
     private extractProvideKeys(content: string): Set<string> {
@@ -275,20 +306,29 @@ export class PluginService {
             // Advanced provide detection
             const provideObjectRegex = /provide\s*:\s*\{([\s\S]*?)\}/g;
 
-            const keyRegex = /(?:['\"`]?([$\w]+)['\"`]?\s*:|(\\b[$\w]+),)/g;
+            const keyValueRegex = /^['\"`]?([$\w]+)['\"`]?\s*:/;
+
+            const shorthandRegex = /^[$\w]+$/;
 
             let provideObjectMatch: RegExpExecArray | null;
 
             while ((provideObjectMatch = provideObjectRegex.exec(pluginContent))) {
                 const keysBlock = provideObjectMatch[1];
 
-                let keyMatch: RegExpExecArray | null;
+                for (const rawEntry of keysBlock.split(',')) {
+                    const entry = rawEntry.trim();
 
-                while ((keyMatch = keyRegex.exec(keysBlock))) {
-                    const key = keyMatch[1] || keyMatch[2];
+                    if (!entry) {
+                        continue;
+                    }
 
-                    if (key) {
-                        provides.push(key);
+                    const keyValueMatch = entry.match(keyValueRegex);
+
+                    if (keyValueMatch) {
+                        provides.push(keyValueMatch[1]);
+                    } else if (shorthandRegex.test(entry)) {
+                        // Shorthand property syntax: `provide: { targetScroll }` === `provide: { targetScroll: targetScroll }`
+                        provides.push(entry);
                     }
                 }
             }
