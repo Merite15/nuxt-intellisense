@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.9.5] - 2026-08-02
+## [0.9.3] - 2026-08-02
 
 ### Added
 
@@ -10,20 +10,10 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- A plugin using the object shorthand `provide: { scrollToElement }` (no `key: value` colon) never had its provided key detected, so any usage elsewhere via `const { $scrollToElement } = useNuxtApp()` was invisible to the reference counter — the CodeLens always reported 0 references regardless of actual usage. The key-extraction regex has been replaced with a plain comma-split parser that correctly handles both `key: value` and bare shorthand properties, including the last property in the object whether or not it has a trailing comma.
+- A plugin that only registers a Vue-level dependency (e.g. `nuxtApp.vueApp.use(VueApexCharts)`) without ever calling `nuxtApp.provide(...)` or declaring a `provide: {...}` object exposes nothing another file could reference by name — Nuxt applies it automatically, the same way it applies `server/plugins`. It was still counted as having "0 references" and flagged as likely dead code. Such plugins now show an informational "registered automatically by Nuxt" CodeLens instead, and are no longer reported in the unused-symbol diagnostics.
 - `MiddlewareService`'s `definePageMeta` matcher (both the plain string and array forms) computed the reference's location using the offset of `definePageMeta(` instead of the offset of the object's opening `{`, a ~15-character difference. "Go to references" on a middleware landed a fixed distance before the actual name — in practice, often right on top of the `middleware:` key itself instead of its value.
 - `LayoutService`'s "plain string" reference matcher (`layout: 'name'`) used the entire matched text (`layout: 'name'`, including the `layout:` key and quotes) as the reference's location range instead of just the layout name itself — inconsistent with every other reference matcher in the codebase, which all point precisely at the name. "Go to references" on a layout now highlights only the name, same as middleware, components, composables and stores.
-
-## [0.9.4] - 2026-08-02
-
-### Fixed
-
-- A plugin that only registers a Vue-level dependency (e.g. `nuxtApp.vueApp.use(VueApexCharts)`) without ever calling `nuxtApp.provide(...)` or declaring a `provide: {...}` object exposes nothing another file could reference by name — Nuxt applies it automatically, the same way it applies `server/plugins`. It was still counted as having "0 references" and flagged as likely dead code. Such plugins now show an informational "registered automatically by Nuxt" CodeLens instead, and are no longer reported in the unused-symbol diagnostics.
-
-## [0.9.3] - 2026-08-02
-
-### Fixed
-
-- A plugin using the object shorthand `provide: { scrollToElement }` (no `key: value` colon) never had its provided key detected, so any usage elsewhere via `const { $scrollToElement } = useNuxtApp()` was invisible to the reference counter — the CodeLens always reported 0 references regardless of actual usage. The key-extraction regex has been replaced with a plain comma-split parser that correctly handles both `key: value` and bare shorthand properties, including the last property in the object whether or not it has a trailing comma.
 
 ## [0.9.2] - 2026-08-02
 

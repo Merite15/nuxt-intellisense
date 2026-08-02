@@ -3,7 +3,7 @@
   "license": "MIT",
   "displayName": "Nuxt Intellisense",
   "description": "Enhanced IntelliSense for Nuxt3 projects",
-  "version": "0.9.5",
+  "version": "0.9.3",
   "publisher": "MeriteK",
   "changelog": "CHANGELOG.md",
   "engines": {
@@ -131,7 +131,7 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
-    "@types/node": "16.x",
+    "@types/node": "~16.18.126",
     "@types/vscode": "^1.60.0",
     "@vscode/test-electron": "^2.1.5",
     "@vscode/vsce": "^3.9.2",
