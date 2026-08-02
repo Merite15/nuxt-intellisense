@@ -1,4 +1,4 @@
-# 🔍 Nuxt Intellisense
+# Nuxt Intellisense
 
 **A VS Code extension that revolutionizes your Nuxt 3 & 4 development experience** — real-time reference counts, dead-code detection and project navigation, right inside the editor.
 
@@ -13,12 +13,12 @@
 - [Development & Tests](#development--tests)
 - [License](#license)
 
-## 📋 Requirements
+## Requirements
 
 - VS Code `1.60.0` or later.
 - A **folder** open in the workspace (not a single loose file) containing a `nuxt.config.js` or `nuxt.config.ts` — this is what triggers the extension's activation and lets it locate your project root.
 
-## 🚀 Installation
+## Installation
 
 1. Open VS Code.
 2. Go to the Extensions panel (`Ctrl+Shift+X` / `Cmd+Shift+X`).
@@ -31,24 +31,24 @@ Or from the command line:
 code --install-extension MeriteK.nuxt-intellisense
 ```
 
-## ✨ Key Features
+## Key Features
 
-### 📊 Smart Visualization
+### Smart Visualization
 
 **Real-time reference count**, shown as a CodeLens above each definition, for:
 
-  - 🧩 Vue/Nuxt components — including usages in `pages`, `app.vue`/`error.vue`, and both PascalCase/kebab-case tags
-  - 🔄 Composables
-  - 🗃️ Pinia stores (including individual methods, variables and getters)
-  - 🖼️ Layouts — via `definePageMeta` (plain string `layout: 'name'` or object form `layout: { name, props }`) and Nitro `routeRules`' `appLayout` (wherever that config file lives)
-  - 🔌 Plugins (including custom directives)
-  - 🔗 Middlewares — via `definePageMeta` (string or array), Nitro `routeRules`' `appMiddleware` (string or array, wherever that config file lives), and `.global.ts` files
-  - 🌐 `server/api` and `server/routes` Nitro event handlers (including dynamic `[id]` segments and `.get`/`.post`/... method suffixes)
-  - 🔧 Utility files such as `utils`, `lib`, `helpers`, `constants`, etc.
+  - Vue/Nuxt components — including usages in `pages`, `app.vue`/`error.vue`, and both PascalCase/kebab-case tags
+  - Composables
+  - Pinia stores (including individual methods, variables and getters)
+  - Layouts — via `definePageMeta` (plain string `layout: 'name'` or object form `layout: { name, props }`) and Nitro `routeRules`' `appLayout` (wherever that config file lives)
+  - Plugins (including custom directives)
+  - Middlewares — via `definePageMeta` (string or array), Nitro `routeRules`' `appMiddleware` (string or array, wherever that config file lives), and `.global.ts` files
+  - `server/api` and `server/routes` Nitro event handlers (including dynamic `[id]` segments and `.get`/`.post`/... method suffixes)
+  - Utility files such as `utils`, `lib`, `helpers`, `constants`, etc.
 
 Detection follows path **segments**, not a fixed root, so it works the same whether your project uses the Nuxt 3 layout (`components/`, `composables/`, ... at the root) or the Nuxt 4 layout (nested under `app/`), and inside local [Nuxt layers](https://nuxt.com/docs/4.x/getting-started/layers) (`layers/<name>/...`).
 
-### 🩺 Code Health
+### Code Health
 
 - **Unused symbol detection**: any symbol with 0 detected references is flagged as a hint in the Problems panel, so dead exports are easy to spot without leaving the editor.
 - **"Search in workspace" before you delete anything**: reference counting here is regex-based, not a real parser — so any component, composable, or store CodeLens showing "0 references" comes with a companion `$(search)` lens that opens VS Code's global search pre-filled with that name, so you can double-check before removing "unused" code.
@@ -61,11 +61,11 @@ Detection follows path **segments**, not a fixed root, so it works the same whet
   - **plugins**: two plugins calling `nuxtApp.provide('key', ...)` (or the `provide: {...}` object form) with the same key, which silently overwrite one another at runtime;
   - **`server/middleware`/`server/plugins`**: two Nitro files sharing the same file name within the same category.
 
-### 🗂️ Nuxt Structure Explorer
+### Nuxt Structure Explorer
 
 A collapsible **"Nuxt Structure"** section is added to the built-in VS Code **Explorer** panel (the file tree, not a separate sidebar icon). It lists your project's components, composables, stores, plugins, middleware, layouts, server API routes, **server middleware**, **server plugins**, utils and **unit/integration test files** (any `*.test.{ts,js}` / `*.spec.{ts,js}`) by category, for quick navigation across a large codebase. Click the refresh icon in its title bar after adding new files to pick up changes.
 
-### 🎯 Nuxt 3 & 4 Precision
+### Nuxt 3 & 4 Precision
 
 - Detection of **auto-imports** across components and composables.
 - Support for **multi-line components** (components with multiple lines and dynamic usage).
@@ -73,7 +73,7 @@ A collapsible **"Nuxt Structure"** section is added to the built-in VS Code **Ex
 - Works with both Nuxt 3's default layout and Nuxt 4's `app/`-nested layout, including `~/`/`@/` alias resolution against either `srcDir`.
 - Monorepo-aware: project root detection prefers the outermost `nuxt.config.ts` when a local layer also ships its own config, so working inside a layer doesn't lose the rest of the app.
 
-### ⚡ Seamless Integration
+### Seamless Integration
 
 - **Highlighting** within the source file to easily locate references.
 - **Quick navigation** to references by simply clicking on them.
@@ -81,7 +81,7 @@ A collapsible **"Nuxt Structure"** section is added to the built-in VS Code **Ex
 - **Real-time updates** as you modify your code, keeping everything synced.
 - Native VS Code **codicons** in every CodeLens, matching your current theme (light/dark).
 
-## ⚙️ Settings
+## Settings
 
 | Setting | Default | Description |
 |---|---|---|
@@ -90,7 +90,7 @@ A collapsible **"Nuxt Structure"** section is added to the built-in VS Code **Ex
 | `nuxt-intellisense.showPhantomReferenceErrors` | `true` | Report middleware/layout names referenced in `definePageMeta` that don't match any file in the project (likely typos) as warnings in the Problems panel. |
 | `nuxt-intellisense.ignoredDirectories` | `["utils","lib","helpers","constants","shared","public","config","assets"]` | Directory names excluded from component/composable/store reference search, on top of `node_modules`, `.nuxt`, `.output` and `dist` (always excluded). Adjust this if your project uses a different folder layout. |
 
-## 📟 Commands
+## Commands
 
 Available from the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
 
@@ -100,20 +100,20 @@ Available from the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
 | `Show Nuxt Intellisense Documentation` | Opens this project's documentation. |
 | `Refresh Nuxt Explorer` | Re-scans the project and refreshes the "Nuxt Structure" panel (also available as a toolbar icon on the panel itself). |
 
-## 🛠 Troubleshooting
+## Troubleshooting
 
 - If you encounter issues with the extension, try restarting VS Code after installation.
 - Ensure that your Nuxt project is correctly configured with a `nuxt.config.js`/`nuxt.config.ts` file **at or above** the folder you have open, so the extension can locate your project root and recognize auto-imports.
 - The "Nuxt Structure" panel only appears when a folder (not a single file) is open in the workspace and a `nuxt.config.js`/`.ts` is found.
 - Reference counts are cached for a few minutes for performance; editing a file invalidates its own cache immediately. Use the `Refresh Nuxt CodeLens` command if you ever see a stale count.
 
-## 🖥 Screenshots
+## Screenshots
 
 ![Demo](./images/demo/1.png)
 ![Demo](./images/demo/2.png)
 _Visual representation of component and composable references in action._
 
-## 💡 Practical Example
+## Practical Example
 
 Given a composable:
 
@@ -137,7 +137,7 @@ export function useData() {
 
 Clicking the CodeLens opens the standard "Find References" view with all three usage locations.
 
-## 🧪 Development & Tests
+## Development & Tests
 
 ```bash
 npm install
@@ -152,6 +152,6 @@ The test suite runs against a lightweight in-process mock of the `vscode` API (s
 - `src/test/unit` — pure logic: path/text/file utilities.
 - `src/test/integration` — service-level behavior, including regression tests for previously fixed bugs.
 
-## 📄 License
+## License
 
 [MIT](./license.txt) © MeriteK
