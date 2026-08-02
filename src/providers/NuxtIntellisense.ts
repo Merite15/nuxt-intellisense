@@ -8,6 +8,7 @@ import { LayoutService } from '../services/LayoutService';
 import { StoreService } from '../services/StoreService';
 import { UtilsService } from '../services/UtilsService';
 import { ServerApiService } from '../services/ServerApiService';
+import { ServerMiddlewarePluginService } from '../services/ServerMiddlewarePluginService';
 import { PageMetaValidationService } from '../services/PageMetaValidationService';
 import { FileUtils } from '../utils/fileUtils';
 import { NuxtComponentInfo } from '../types';
@@ -40,18 +41,21 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
 
     private serverApiService?: ServerApiService;
 
+    private serverMiddlewarePluginService?: ServerMiddlewarePluginService;
+
     private pageMetaValidationService?: PageMetaValidationService;
 
     private initializeServices() {
         if (this.nuxtProjectRoot) {
             this.componentService = new ComponentService(this.nuxtProjectRoot);
             this.composableService = new ComposableService(this.nuxtProjectRoot);
-            this.pluginService = new PluginService();
+            this.pluginService = new PluginService(this.nuxtProjectRoot);
             this.middlewareService = new MiddlewareService();
             this.layoutService = new LayoutService();
             this.storeService = new StoreService(this.autoImportCache);
             this.utilsService = new UtilsService(this.nuxtProjectRoot);
             this.serverApiService = new ServerApiService();
+            this.serverMiddlewarePluginService = new ServerMiddlewarePluginService(this.nuxtProjectRoot);
             this.pageMetaValidationService = new PageMetaValidationService(this.nuxtProjectRoot);
         }
     }
@@ -116,6 +120,12 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
                 const serverApiLenses = await this.serverApiService.provideCodeLenses(document);
 
                 lenses.push(...serverApiLenses);
+            }
+
+            if (fileInfo.isServerMiddlewareOrPlugin && this.serverMiddlewarePluginService) {
+                const serverLenses = await this.serverMiddlewarePluginService.provideCodeLenses(document);
+
+                lenses.push(...serverLenses);
             }
 
             if (fileInfo.isUtil && this.utilsService) {
@@ -259,6 +269,7 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
             isLayout: hasSegment('layouts'),
             isStore: hasSegment('stores', 'store'),
             isServerApi: hasSegment('server') && hasSegment('api', 'routes'),
+            isServerMiddlewareOrPlugin: hasSegment('server') && hasSegment('middleware', 'plugins'),
             isPage: hasSegment('pages'),
             isUtil: hasSegment('utils', 'lib', 'services', 'types', 'helpers', 'constants', 'schemas', 'validationSchemas')
         };
@@ -294,6 +305,7 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
         this.storeService?.dispose();
         this.utilsService?.dispose();
         this.serverApiService?.dispose();
+        this.serverMiddlewarePluginService?.dispose();
         this.pageMetaValidationService?.dispose();
         this.unusedDiagnostics.dispose();
         this.phantomReferenceDiagnostics.dispose();

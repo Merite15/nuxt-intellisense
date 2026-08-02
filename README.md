@@ -52,14 +52,17 @@ Detection follows path **segments**, not a fixed root, so it works the same whet
 
 - **Unused symbol detection**: any symbol with 0 detected references is flagged as a hint in the Problems panel, so dead exports are easy to spot without leaving the editor.
 - **Phantom reference detection**: the inverse problem — a `middleware`/`layout` name referenced in `definePageMeta` (string, array, or object form) or in `routeRules`' `appMiddleware`/`appLayout` that doesn't match any actual file is flagged as a warning in the Problems panel. Catches typos (`middleware: 'atuh'`) that TypeScript can't see, since these are plain strings.
+- **Unknown `definePageMeta` key detection**: a key that's close to a known one (`midleware` vs `middleware`) is flagged as a likely typo, with a suggestion. Genuinely custom keys added by Nuxt modules (`requiresAuth`, i18n-specific keys, ...) are left alone — only near-misses of the core Nuxt keys are reported, to avoid false positives.
 - **Duplicate name detection**: warns when two different files would collide under Nuxt's auto-import rules, with a one-click link to the conflicting files —
   - **components**: two `.vue` files resolving to the same Nuxt component name (e.g. `components/ui/Button.vue` and `components/common/Button.vue` both resolving to `Button`);
   - **composables**: two files exporting a function/const with the same name (composables are auto-imported by function name, not file path);
-  - **stores**: two `defineStore(...)` calls using the same store id, regardless of which file they're in.
+  - **stores**: two `defineStore(...)` calls using the same store id, regardless of which file they're in;
+  - **plugins**: two plugins calling `nuxtApp.provide('key', ...)` (or the `provide: {...}` object form) with the same key, which silently overwrite one another at runtime;
+  - **`server/middleware`/`server/plugins`**: two Nitro files sharing the same file name within the same category.
 
 ### 🗂️ Nuxt Structure Explorer
 
-A collapsible **"Nuxt Structure"** section is added to the built-in VS Code **Explorer** panel (the file tree, not a separate sidebar icon). It lists your project's components, composables, stores, plugins, middleware, layouts, server API routes, utils and **unit/integration test files** (any `*.test.{ts,js}` / `*.spec.{ts,js}`) by category, for quick navigation across a large codebase. Click the refresh icon in its title bar after adding new files to pick up changes.
+A collapsible **"Nuxt Structure"** section is added to the built-in VS Code **Explorer** panel (the file tree, not a separate sidebar icon). It lists your project's components, composables, stores, plugins, middleware, layouts, server API routes, **server middleware**, **server plugins**, utils and **unit/integration test files** (any `*.test.{ts,js}` / `*.spec.{ts,js}`) by category, for quick navigation across a large codebase. Click the refresh icon in its title bar after adding new files to pick up changes.
 
 ### 🎯 Nuxt 3 & 4 Precision
 
@@ -73,6 +76,7 @@ A collapsible **"Nuxt Structure"** section is added to the built-in VS Code **Ex
 
 - **Highlighting** within the source file to easily locate references.
 - **Quick navigation** to references by simply clicking on them.
+- **Hover preview**: hovering a component tag (`<MyButton>` or `<my-button>`) in a template shows its reference count and a link to its definition, without having to open the file.
 - **Real-time updates** as you modify your code, keeping everything synced.
 - Native VS Code **codicons** in every CodeLens, matching your current theme (light/dark).
 

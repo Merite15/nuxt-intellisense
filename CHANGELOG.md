@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2026-08-01
+
+### Added
+
+- **Duplicate `provide` key detection**: two plugins calling `nuxtApp.provide('key', ...)` (classic or `provide: {...}` object form) with the same key silently overwrite one another at runtime — now flagged as a warning CodeLens on each conflicting plugin, project-wide.
+- **Unknown `definePageMeta` key detection**: a top-level key that's a near-miss (Levenshtein distance ≤ 2) of a known Nuxt page-meta key (`midleware` vs `middleware`) is flagged as a likely typo with a suggested correction. Deliberately conservative — keys that aren't close to any known key are left alone, since many Nuxt modules add their own `definePageMeta` keys via type augmentation, and a strict allow-list would produce constant false positives on those.
+- **`server/middleware` and `server/plugins` coverage**: both now appear as categories in the "Nuxt Structure" explorer, and a new `ServerMiddlewarePluginService` flags two Nitro files sharing the same name within the same category (a common leftover from refactors). Reference counting isn't meaningful here since Nitro applies these automatically rather than via named references.
+- **Hover preview for components**: hovering a component tag (`<MyButton>` / `<my-button>`) in a `.vue` template shows its live reference count and a link to its definition file, without needing to open it. Reuses the exact same `ComponentService` logic and cache as the CodeLens, so counts always match.
+
 ## [0.8.4] - 2026-08-01
 
 ### Added

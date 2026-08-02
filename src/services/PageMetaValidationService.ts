@@ -8,6 +8,15 @@ interface NamesCache {
     timestamp: number;
 }
 
+// Clés "coeur" documentées de definePageMeta. Volontairement non exhaustif : de
+// nombreux modules Nuxt (i18n, sécurité, ...) ajoutent leurs propres clés via
+// augmentation de types, donc on ne signale QUE les quasi-doublons d'une clé connue
+// (faute de frappe probable), jamais une clé simplement absente de cette liste.
+const KNOWN_PAGE_META_KEYS = new Set([
+    'alias', 'key', 'keepalive', 'layout', 'layoutTransition', 'middleware',
+    'name', 'path', 'pageTransition', 'redirect', 'scrollToTop', 'validate'
+]);
+
 /**
  * Détecte les références "fantômes" dans `definePageMeta({...})` : un middleware ou
  * un layout référencé par son nom, mais qui ne correspond à aucun fichier existant
@@ -71,9 +80,132 @@ export class PageMetaValidationService {
             this.checkStringOrArrayProperty(text, metaContent, braceOpenIndex, 'middleware', middlewareNames, 'middleware', diagnostics);
             this.checkStringOrArrayProperty(text, metaContent, braceOpenIndex, 'layout', layoutNames, 'layout', diagnostics);
             this.checkLayoutObjectForm(text, metaContent, braceOpenIndex, layoutNames, diagnostics);
+            this.checkUnknownKeys(text, metaContent, braceOpenIndex, diagnostics);
         }
 
         return diagnostics;
+    }
+
+    /**
+     * Signale une clé de premier niveau qui n'est ni une clé connue de
+     * `definePageMeta`, ni assez différente d'une clé connue pour être un choix
+     * délibéré (clé personnalisée d'un module) — c'est-à-dire une faute de frappe
+     * probable (`midleware` au lieu de `middleware`).
+     */
+    private checkUnknownKeys(
+        fullText: string,
+        metaContent: string,
+        blockStart: number,
+        diagnostics: vscode.Diagnostic[]
+    ): void {
+        // `metaContent` inclut ses accolades englobantes (extractBalancedBlock renvoie
+        // le bloc complet) : on les retire pour que la profondeur 0 corresponde bien
+        // au premier niveau de l'objet, et on décale les index en conséquence.
+        const innerContent = metaContent.slice(1, -1);
+        const topLevelKeys = this.extractTopLevelKeys(innerContent).map(k => ({ name: k.name, index: k.index + 1 }));
+
+        for (const { name, index } of topLevelKeys) {
+            if (KNOWN_PAGE_META_KEYS.has(name)) {
+                continue;
+            }
+
+            let closestKey: string | null = null;
+            let closestDistance = Infinity;
+
+            for (const knownKey of KNOWN_PAGE_META_KEYS) {
+                const distance = this.levenshteinDistance(name, knownKey);
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestKey = knownKey;
+                }
+            }
+
+            // Distance courte par rapport à la longueur du mot : probable typo.
+            // Une clé réellement personnalisée (ex: "requiresAuth") est généralement
+            // beaucoup plus éloignée de toute clé connue.
+            if (closestKey && closestDistance > 0 && closestDistance <= 2 && name.length > 2) {
+                const absoluteIndex = blockStart + index;
+                const start = TextUtils.indexToPosition(fullText, absoluteIndex);
+                const end = TextUtils.indexToPosition(fullText, absoluteIndex + name.length);
+
+                diagnostics.push(new vscode.Diagnostic(
+                    new vscode.Range(
+                        new vscode.Position(start.line, start.character),
+                        new vscode.Position(end.line, end.character)
+                    ),
+                    `Nuxt Intellisense : "${name}" n'est pas une clé connue de definePageMeta — vouliez-vous dire "${closestKey}" ?`,
+                    vscode.DiagnosticSeverity.Warning
+                ));
+            }
+        }
+    }
+
+    /**
+     * Énumère les clés `nom:` situées directement au premier niveau du bloc (pas
+     * dans un objet/tableau imbriqué), en ignorant le contenu des chaînes de
+     * caractères pour éviter les faux positifs.
+     */
+    private extractTopLevelKeys(objectContent: string): { name: string; index: number }[] {
+        const keys: { name: string; index: number }[] = [];
+        let depth = 0;
+        let i = 0;
+
+        while (i < objectContent.length) {
+            const char = objectContent[i];
+
+            if (char === '{' || char === '[' || char === '(') {
+                depth++;
+                i++;
+                continue;
+            }
+
+            if (char === '}' || char === ']' || char === ')') {
+                depth--;
+                i++;
+                continue;
+            }
+
+            if (char === "'" || char === '"' || char === '`') {
+                const quote = char;
+                i++;
+                while (i < objectContent.length && objectContent[i] !== quote) {
+                    if (objectContent[i] === '\\') i++;
+                    i++;
+                }
+                i++;
+                continue;
+            }
+
+            if (depth === 0) {
+                const keyMatch = /^([A-Za-z_$][\w$]*)\s*:/.exec(objectContent.slice(i));
+                if (keyMatch) {
+                    keys.push({ name: keyMatch[1], index: i });
+                    i += keyMatch[0].length;
+                    continue;
+                }
+            }
+
+            i++;
+        }
+
+        return keys;
+    }
+
+    private levenshteinDistance(a: string, b: string): number {
+        const dp: number[][] = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
+
+        for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+        for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+
+        for (let i = 1; i <= a.length; i++) {
+            for (let j = 1; j <= b.length; j++) {
+                dp[i][j] = a[i - 1] === b[j - 1]
+                    ? dp[i - 1][j - 1]
+                    : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+            }
+        }
+
+        return dp[a.length][b.length];
     }
 
     /**

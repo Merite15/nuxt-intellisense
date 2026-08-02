@@ -16,7 +16,10 @@ export class PluginService {
 
     private fileWatcher: vscode.FileSystemWatcher | undefined;
 
-    constructor() {
+    private duplicateProvideKeysCache: { keys: Map<string, string[]>, timestamp: number } | null = null;
+    private duplicateProvideKeysCacheTTL: number = 600000; // 10 minutes
+
+    constructor(private nuxtProjectRoot: string) {
         this.setupFileWatcher();
     }
 
@@ -32,6 +35,7 @@ export class PluginService {
         const onFileEvent = (uri: vscode.Uri) => {
             if (!FileUtils.shouldSkipFile(uri.fsPath)) {
                 this.invalidateReferenceCache();
+                this.duplicateProvideKeysCache = null;
             }
         };
 
@@ -78,9 +82,135 @@ export class PluginService {
                     ]
                 })
             );
+
+            // Une seule occurrence de definePageMeta par fichier plugin en pratique :
+            // le check de doublon de clés provide n'a besoin d'être fait qu'une fois.
+            await this.appendDuplicateProvideKeyLenses(document, text, range, lenses);
         }
 
         return lenses;
+    }
+
+    /**
+     * Deux plugins qui appellent `nuxtApp.provide('clé', ...)` avec la même clé
+     * s'écrasent silencieusement à l'exécution (le second gagne). On le signale.
+     */
+    private async appendDuplicateProvideKeyLenses(
+        document: vscode.TextDocument,
+        text: string,
+        range: vscode.Range,
+        lenses: vscode.CodeLens[]
+    ): Promise<void> {
+        const thisFileKeys = this.extractProvideKeys(text);
+        if (thisFileKeys.size === 0) {
+            return;
+        }
+
+        const duplicateKeys = await this.getCachedDuplicateProvideKeys();
+
+        for (const key of thisFileKeys) {
+            const conflictingPaths = (duplicateKeys.get(key) || []).filter(p => p !== document.uri.fsPath);
+
+            if (conflictingPaths.length === 0) {
+                continue;
+            }
+
+            const conflictLocations = conflictingPaths.map(
+                p => new vscode.Location(vscode.Uri.file(p), new vscode.Position(0, 0))
+            );
+
+            lenses.push(
+                new vscode.CodeLens(range, {
+                    title: `$(warning) Clé provide "${key}" en conflit avec ${conflictingPaths.length} autre plugin${conflictingPaths.length > 1 ? 's' : ''}`,
+                    command: 'editor.action.showReferences',
+                    arguments: [
+                        document.uri,
+                        range.start,
+                        conflictLocations
+                    ]
+                })
+            );
+        }
+    }
+
+    private extractProvideKeys(content: string): Set<string> {
+        const keys = new Set<string>();
+
+        const provideRegex = /nuxtApp\.provide\s*\(\s*['"`]([$\w]+)['"`]/g;
+        let match: RegExpExecArray | null;
+
+        while ((match = provideRegex.exec(content)) !== null) {
+            keys.add(match[1]);
+        }
+
+        const provideObjectRegex = /provide\s*:\s*\{([\s\S]*?)\}/g;
+        const keyRegex = /(?:['"`]?([$\w]+)['"`]?\s*:|(\b[$\w]+),)/g;
+        let objectMatch: RegExpExecArray | null;
+
+        while ((objectMatch = provideObjectRegex.exec(content)) !== null) {
+            const block = objectMatch[1];
+
+            keyRegex.lastIndex = 0;
+            let keyMatch: RegExpExecArray | null;
+
+            while ((keyMatch = keyRegex.exec(block)) !== null) {
+                const key = keyMatch[1] || keyMatch[2];
+                if (key) {
+                    keys.add(key);
+                }
+            }
+        }
+
+        return keys;
+    }
+
+    private async getCachedDuplicateProvideKeys(): Promise<Map<string, string[]>> {
+        const now = Date.now();
+
+        if (this.duplicateProvideKeysCache && (now - this.duplicateProvideKeysCache.timestamp < this.duplicateProvideKeysCacheTTL)) {
+            return this.duplicateProvideKeysCache.keys;
+        }
+
+        const keys = await this.computeDuplicateProvideKeys();
+
+        this.duplicateProvideKeysCache = { keys, timestamp: now };
+
+        return keys;
+    }
+
+    private async computeDuplicateProvideKeys(): Promise<Map<string, string[]>> {
+        const dirs = await FileUtils.findAllDirsByName(this.nuxtProjectRoot, 'plugins');
+        const pathsByKey = new Map<string, string[]>();
+
+        for (const dir of dirs) {
+            const files = await vscode.workspace.findFiles(new vscode.RelativePattern(dir, '**/*.{ts,js}'));
+
+            for (const file of files) {
+                let content: string;
+                try {
+                    content = fs.readFileSync(file.fsPath, 'utf-8');
+                } catch {
+                    continue;
+                }
+
+                for (const key of this.extractProvideKeys(content)) {
+                    const paths = pathsByKey.get(key) || [];
+                    if (!paths.includes(file.fsPath)) {
+                        paths.push(file.fsPath);
+                    }
+                    pathsByKey.set(key, paths);
+                }
+            }
+        }
+
+        const duplicates = new Map<string, string[]>();
+        for (const [key, paths] of pathsByKey) {
+            if (paths.length > 1) {
+                duplicates.set(key, paths);
+            }
+        }
+
+        return duplicates;
     }
 
     private async getCachedReferences(cacheKey: string, pluginName: string): Promise<vscode.Location[]> {

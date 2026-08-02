@@ -35,6 +35,21 @@ export class CodeLens {
     constructor(public range: Range, public command?: any) { }
 }
 
+export class MarkdownString {
+    public value: string = '';
+    public isTrusted: boolean = false;
+    public supportThemeIcons: boolean = false;
+
+    appendMarkdown(value: string): MarkdownString {
+        this.value += value;
+        return this;
+    }
+}
+
+export class Hover {
+    constructor(public contents: MarkdownString | string, public range?: Range) { }
+}
+
 export class Uri {
     private constructor(public fsPath: string) { }
 

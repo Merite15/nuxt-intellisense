@@ -28,7 +28,7 @@ describe('PluginService (integration)', () => {
     beforeEach(() => {
         tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nuxt-intellisense-test-'));
         setFixtureRoot(tmpDir);
-        service = new PluginService();
+        service = new PluginService(tmpDir);
     });
 
     afterEach(() => {
@@ -69,5 +69,49 @@ export const useUserStore = defineStore('user', () => {
 
         assert.strictEqual(lenses.length, 1);
         assert.match((lenses[0].command as any).title, /\$\(plug\) 1 reference/);
+    });
+
+    it('flags two plugins that provide the same key', async () => {
+        const pluginsDir = path.join(tmpDir, 'plugins');
+        fs.mkdirSync(pluginsDir);
+        fs.writeFileSync(
+            path.join(pluginsDir, 'analytics.ts'),
+            `export default defineNuxtPlugin((nuxtApp) => {
+  nuxtApp.provide('tracker', { track: (e: string) => {} });
+});
+`
+        );
+        fs.writeFileSync(
+            path.join(pluginsDir, 'legacy-analytics.ts'),
+            `export default defineNuxtPlugin((nuxtApp) => {
+  nuxtApp.provide('tracker', { track: (e: string) => {} });
+});
+`
+        );
+
+        const doc = makeDocument(path.join(pluginsDir, 'analytics.ts'));
+        const lenses = await service.provideCodeLenses(doc);
+
+        const conflictLens = lenses.find(l => /\$\(warning\)/.test((l.command as any)?.title ?? ''));
+        assert.ok(conflictLens, 'expected a duplicate provide-key warning lens');
+        assert.match((conflictLens!.command as any).title, /"tracker"/);
+    });
+
+    it('does not flag a provide key that is unique', async () => {
+        const pluginsDir = path.join(tmpDir, 'plugins');
+        fs.mkdirSync(pluginsDir);
+        fs.writeFileSync(
+            path.join(pluginsDir, 'analytics.ts'),
+            `export default defineNuxtPlugin((nuxtApp) => {
+  nuxtApp.provide('tracker', { track: (e: string) => {} });
+});
+`
+        );
+
+        const doc = makeDocument(path.join(pluginsDir, 'analytics.ts'));
+        const lenses = await service.provideCodeLenses(doc);
+
+        const conflictLens = lenses.find(l => /\$\(warning\)/.test((l.command as any)?.title ?? ''));
+        assert.strictEqual(conflictLens, undefined);
     });
 });

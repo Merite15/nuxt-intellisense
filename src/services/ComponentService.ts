@@ -583,6 +583,27 @@ export class ComponentService {
     }
 
     /**
+     * Retrouve le fichier `.vue` correspondant à un nom de composant Nuxt résolu
+     * (ex: "UiMyButton"). Utilisé par le hover provider pour savoir si un tag survolé
+     * correspond réellement à un composant du projet avant d'afficher un aperçu.
+     */
+    public async findComponentFileByExactName(name: string): Promise<string | null> {
+        const dirs = await this.getCachedComponentDirs();
+
+        for (const dir of dirs) {
+            const files = await vscode.workspace.findFiles(new vscode.RelativePattern(dir, '**/*.vue'));
+
+            for (const file of files) {
+                if (this.getNuxtComponentName(file.fsPath, dir) === name) {
+                    return file.fsPath;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Invalide le cache complètement (à utiliser avec parcimonie)
      */
     public invalidateAllCaches(): void {

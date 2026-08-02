@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { NuxtIntellisense } from './providers/NuxtIntellisense';
 import { NuxtExplorerProvider } from './providers/NuxtExplorerProvider';
+import { NuxtHoverProvider } from './providers/NuxtHoverProvider';
+import { ComponentService } from './services/ComponentService';
 import { FileUtils } from './utils/fileUtils';
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -33,6 +35,15 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
       vscode.window.registerTreeDataProvider('nuxtIntellisenseExplorer', explorerProvider),
       vscode.commands.registerCommand('nuxt-intellisense.refreshExplorer', () => explorerProvider.refresh())
+    );
+
+    // Instance dédiée (indépendante de celle du CodeLensProvider, qui n'est créée que
+    // lazily au premier fichier ouvert) pour que le survol fonctionne dès l'activation.
+    const hoverComponentService = new ComponentService(detectedNuxtRoot ?? workspaceFolder.uri.fsPath);
+
+    context.subscriptions.push(
+      vscode.languages.registerHoverProvider('vue', new NuxtHoverProvider(hoverComponentService)),
+      hoverComponentService
     );
   }
 
