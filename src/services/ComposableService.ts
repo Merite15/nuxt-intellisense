@@ -116,6 +116,9 @@ export class ComposableService {
                     ]
                 })
             );
+            if (referenceCount === 0) {
+                lenses.push(TextUtils.buildSearchInWorkspaceLens(range, item.name));
+            }
         }
 
         return lenses;

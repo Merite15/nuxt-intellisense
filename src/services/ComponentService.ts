@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PathUtils } from '../utils/pathUtils';
 import { FileUtils } from '../utils/fileUtils';
+import { TextUtils } from '../utils/textUtils';
 
 interface ReferenceCache {
     references: vscode.Location[];
@@ -185,6 +186,9 @@ export class ComponentService {
                     ]
                 })
             );
+            if (referenceCount === 0) {
+                lenses.push(TextUtils.buildSearchInWorkspaceLens(range, String(nuxtComponentName)));
+            }
             hasAddedLens = true;
         }
 
@@ -212,6 +216,9 @@ export class ComponentService {
                         ]
                     })
                 );
+                if (referenceCount === 0) {
+                    lenses.push(TextUtils.buildSearchInWorkspaceLens(range, String(nuxtComponentName)));
+                }
                 hasAddedLens = true;
             }
         }
@@ -239,6 +246,9 @@ export class ComponentService {
                         ]
                     })
                 );
+                if (referenceCount === 0) {
+                    lenses.push(TextUtils.buildSearchInWorkspaceLens(range, String(nuxtComponentName)));
+                }
                 hasAddedLens = true;
             }
         }
@@ -269,6 +279,9 @@ export class ComponentService {
                         ]
                     })
                 );
+                if (referenceCount === 0) {
+                    lenses.push(TextUtils.buildSearchInWorkspaceLens(range, String(nuxtComponentName)));
+                }
             }
         }
 

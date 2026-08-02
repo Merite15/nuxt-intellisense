@@ -86,6 +86,25 @@ export class TextUtils {
         return null;
     }
 
+    /**
+     * CodeLens complémentaire affiché à côté d'un "0 reference" : notre détection
+     * est basée sur des regex, pas un vrai parseur — avant de supprimer quoi que ce
+     * soit, mieux vaut permettre à l'utilisateur de vérifier lui-même via la
+     * recherche globale de VS Code plutôt que de faire confiance aveuglément.
+     */
+    static buildSearchInWorkspaceLens(range: vscode.Range, name: string): vscode.CodeLens {
+        return new vscode.CodeLens(range, {
+            title: `$(search) Rechercher "${name}" dans le projet`,
+            command: 'workbench.action.findInFiles',
+            arguments: [
+                {
+                    query: name,
+                    triggerSearch: true
+                }
+            ]
+        });
+    }
+
     static removeDuplicateReferences(references: vscode.Location[]): vscode.Location[] {
         const uniqueRefs: vscode.Location[] = [];
         const seen = new Set<string>();

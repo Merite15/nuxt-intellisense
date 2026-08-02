@@ -76,4 +76,22 @@ describe('ComposableService (integration)', () => {
         const conflictLens = lenses.find(l => /\$\(warning\)/.test((l.command as any)?.title ?? ''));
         assert.strictEqual(conflictLens, undefined);
     });
+
+    it('offers a "search in workspace" lens next to a 0-reference composable', async () => {
+        const composablesDir = path.join(tmpDir, 'composables');
+        fs.mkdirSync(composablesDir);
+        const file = path.join(composablesDir, 'useOrphan.ts');
+        fs.writeFileSync(
+            file,
+            `export function useOrphan() {\n  const value = ref(0);\n  return { value };\n}\n`
+        );
+
+        const doc = makeDocument(file);
+        const lenses = await service.provideCodeLenses(doc);
+
+        const searchLenses = lenses.filter(l => (l.command as any)?.command === 'workbench.action.findInFiles');
+        // Un pour le composable lui-même, un pour "value" (les deux à 0 référence)
+        assert.strictEqual(searchLenses.length, 2);
+        assert.ok(searchLenses.some(l => (l.command as any).arguments[0].query === 'useOrphan'));
+    });
 });

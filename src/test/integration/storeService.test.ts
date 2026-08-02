@@ -121,4 +121,44 @@ export const useSettingsStore = defineStore('settings', () => ({}));
         assert.ok(conflictLens, 'expected a duplicate store id warning lens');
         assert.match((conflictLens!.command as any).title, /"user"/);
     });
+
+    it('does not leak the exported hook name as a fake "variable" for a store using an implicit arrow return', async () => {
+        const storesDir = path.join(tmpDir, 'stores');
+        fs.mkdirSync(storesDir);
+        fs.writeFileSync(
+            path.join(storesDir, 'settings.ts'),
+            `import { defineStore } from 'pinia';\nexport const useSettingsStore = defineStore('settings', () => ({}));\n`
+        );
+
+        await service.scanStoresDirectory(storesDir);
+
+        const storeInfo = cache.get('stores')?.find(s => s.name === 'settings');
+        assert.ok(storeInfo, 'store should be indexed');
+        // "useSettingsStore" (the exported const name, not returned by the composition
+        // function) must not be picked up as one of the store's own variables.
+        assert.deepStrictEqual(storeInfo!.members?.variables, []);
+    });
+
+    it('offers a "search in workspace" lens next to a 0-reference store', async () => {
+        const storesDir = path.join(tmpDir, 'stores');
+        fs.mkdirSync(storesDir);
+        const storeFile = path.join(storesDir, 'orphan.ts');
+        fs.writeFileSync(
+            storeFile,
+            `import { defineStore } from 'pinia';\nexport const useOrphanStore = defineStore('orphan', () => ({}));\n`
+        );
+
+        await service.scanStoresDirectory(storesDir);
+
+        const doc = makeDocument(storeFile);
+        const lenses = await service.provideCodeLenses(doc);
+
+        const mainLens = lenses.find(l => /\$\(database\)/.test((l.command as any)?.title ?? ''));
+        assert.ok(mainLens, 'expected the main store lens');
+        assert.match((mainLens!.command as any).title, /0 reference/);
+
+        const searchLens = lenses.find(l => (l.command as any)?.command === 'workbench.action.findInFiles');
+        assert.ok(searchLens, 'expected a companion "search in workspace" lens');
+        assert.deepStrictEqual((searchLens!.command as any).arguments[0], { query: 'orphan', triggerSearch: true });
+    });
 });

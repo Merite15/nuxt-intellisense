@@ -51,6 +51,7 @@ Detection follows path **segments**, not a fixed root, so it works the same whet
 ### 🩺 Code Health
 
 - **Unused symbol detection**: any symbol with 0 detected references is flagged as a hint in the Problems panel, so dead exports are easy to spot without leaving the editor.
+- **"Search in workspace" before you delete anything**: reference counting here is regex-based, not a real parser — so any component, composable, or store CodeLens showing "0 references" comes with a companion `$(search)` lens that opens VS Code's global search pre-filled with that name, so you can double-check before removing "unused" code.
 - **Phantom reference detection**: the inverse problem — a `middleware`/`layout` name referenced in `definePageMeta` (string, array, or object form) or in `routeRules`' `appMiddleware`/`appLayout` that doesn't match any actual file is flagged as a warning in the Problems panel. Catches typos (`middleware: 'atuh'`) that TypeScript can't see, since these are plain strings.
 - **Unknown `definePageMeta` key detection**: a key that's close to a known one (`midleware` vs `middleware`) is flagged as a likely typo, with a suggestion. Genuinely custom keys added by Nuxt modules (`requiresAuth`, i18n-specific keys, ...) are left alone — only near-misses of the core Nuxt keys are reported, to avoid false positives.
 - **Duplicate name detection**: warns when two different files would collide under Nuxt's auto-import rules, with a one-click link to the conflicting files —

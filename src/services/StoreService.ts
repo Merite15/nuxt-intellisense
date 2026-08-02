@@ -138,6 +138,9 @@ export class StoreService {
                             ],
                             tooltip: `Method of ${storeName} store\nClick to show references`
                         }));
+                        if (uniqueReferences.length === 0) {
+                            lenses.push(TextUtils.buildSearchInWorkspaceLens(methodRange, method));
+                        }
                     }
                 }
 
@@ -163,6 +166,9 @@ export class StoreService {
                             ],
                             tooltip: `Variable of ${storeName} store\nClick to show references`
                         }));
+                        if (uniqueReferences.length === 0) {
+                            lenses.push(TextUtils.buildSearchInWorkspaceLens(varRange, variable));
+                        }
                     }
                 }
 
@@ -188,6 +194,9 @@ export class StoreService {
                             ],
                             tooltip: `Getter of ${storeName} store\nClick to show references`
                         }));
+                        if (uniqueReferences.length === 0) {
+                            lenses.push(TextUtils.buildSearchInWorkspaceLens(getterRange, getter));
+                        }
                     }
                 }
             }
@@ -205,6 +214,9 @@ export class StoreService {
                     ]
                 })
             );
+            if (referenceCount === 0) {
+                lenses.push(TextUtils.buildSearchInWorkspaceLens(range, storeName));
+            }
         }
 
         return lenses;
@@ -571,10 +583,12 @@ export class StoreService {
                             v => !storeInfo.members!.methods!.includes(v) && !storeInfo.members!.getters!.includes(v)
                         );
 
-                        // Analyse du return pour vérifier ce qui est exposé
-                        const returnRegex = /return\s*{([^}]*)}/s;
-                        const returnMatch = content.match(returnRegex);
-                        if (returnMatch && returnMatch[1]) {
+                        // Analyse du return pour vérifier ce qui est exposé (forme explicite
+                        // `return { ... }` ou retour implicite d'une fléchée `=> ({ ... })`).
+                        const explicitReturnRegex = /return\s*{([^}]*)}/s;
+                        const implicitReturnRegex = /=>\s*\(\s*{([^}]*)}\s*\)/s;
+                        const returnMatch = content.match(explicitReturnRegex) || content.match(implicitReturnRegex);
+                        if (returnMatch) {
                             const returnContent = returnMatch[1];
                             const returnedMembers = returnContent.split(',')
                                 .map(line => line.trim())

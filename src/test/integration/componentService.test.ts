@@ -109,4 +109,26 @@ describe('ComponentService (integration)', () => {
         assert.ok(mainLens, 'expected a component usage lens');
         assert.match((mainLens!.command as any).title, /1 reference/);
     });
+
+    it('offers a "search in workspace" lens next to a 0-reference component, so the user can double-check before deleting it', async () => {
+        const componentsDir = path.join(tmpDir, 'components');
+        fs.mkdirSync(componentsDir);
+        const componentFile = path.join(componentsDir, 'Orphan.vue');
+        fs.writeFileSync(
+            componentFile,
+            `<script setup lang="ts">\n</script>\n<template><button /></template>\n`
+        );
+
+        const doc = makeDocument(componentFile);
+        const lenses = await service.provideCodeLenses(doc);
+
+        const mainLens = lenses.find(l => /\$\(package\)/.test((l.command as any)?.title ?? ''));
+        assert.ok(mainLens, 'expected a component usage lens');
+        assert.match((mainLens!.command as any).title, /0 reference/);
+
+        const searchLens = lenses.find(l => (l.command as any)?.command === 'workbench.action.findInFiles');
+        assert.ok(searchLens, 'expected a companion "search in workspace" lens');
+        assert.match((searchLens!.command as any).title, /"Orphan"/);
+        assert.deepStrictEqual((searchLens!.command as any).arguments[0], { query: 'Orphan', triggerSearch: true });
+    });
 });

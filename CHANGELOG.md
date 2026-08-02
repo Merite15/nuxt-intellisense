@@ -2,7 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.9.0] - 2026-08-01
+## [0.9.1] - 2026-08-02
+
+### Added
+
+- **"Search in workspace" companion lens**: any CodeLens reporting "0 references" for a component, composable, or store (including individual store methods/variables/getters) now shows an additional `$(search)` lens that opens VS Code's global search pre-filled with that name. Reference detection here is regex-based, not a real parser, so before deleting anything flagged as unused, this lets you double-check with a real full-text search in one click.
+
+### Fixed
+
+- A Pinia store defined with an implicit arrow return (`defineStore('x', () => ({ ... }))`) instead of an explicit `return { ... }` statement bypassed the "only keep members actually exposed" filter, which only recognized the explicit form. In practice this leaked the store's own exported hook name (e.g. `useSettingsStore`) into its `variables` list, producing a spurious extra CodeLens for a "variable" that was really just the store declaration itself. Both return forms are now recognized.
+
+## [0.9.0] - 2026-08-02
 
 ### Added
 
@@ -11,14 +21,14 @@ All notable changes to this project will be documented in this file.
 - **`server/middleware` and `server/plugins` coverage**: both now appear as categories in the "Nuxt Structure" explorer, and a new `ServerMiddlewarePluginService` flags two Nitro files sharing the same name within the same category (a common leftover from refactors). Reference counting isn't meaningful here since Nitro applies these automatically rather than via named references.
 - **Hover preview for components**: hovering a component tag (`<MyButton>` / `<my-button>`) in a `.vue` template shows its live reference count and a link to its definition file, without needing to open it. Reuses the exact same `ComponentService` logic and cache as the CodeLens, so counts always match.
 
-## [0.8.4] - 2026-08-01
+## [0.8.4] - 2026-08-02
 
 ### Added
 
 - **Phantom reference detection**: a new `PageMetaValidationService` flags `middleware`/`layout` names referenced in `definePageMeta` (string, array, or object form) or in `routeRules`' `appMiddleware`/`appLayout` that don't match any file found in the project, as a warning in the Problems panel — catches typos in these plain-string references, the mirror image of the existing "0 references" dead-code detection. Toggle with `nuxt-intellisense.showPhantomReferenceErrors`. Correctly excludes `.global.ts` middleware, which is never referenced by name.
 - **Duplicate name detection extended to composables and stores** (previously components only): composables are auto-imported by their exported function name rather than by file path, so two different files exporting the same name (e.g. two `useAuth`) now trigger a conflict warning; similarly, two `defineStore(...)` calls sharing the same store id — even across unrelated files — are now flagged.
 
-## [0.8.3] - 2026-08-01
+## [0.8.3] - 2026-08-02
 
 ### Fixed
 
@@ -35,7 +45,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - Project root detection stopped at the first ancestor directory containing both `nuxt.config.ts` and `package.json`/`.git`. In a monorepo using local Nuxt layers (`layers/<name>/`) that ship their own `nuxt.config.ts` **and** `package.json`, opening a file inside a layer would incorrectly scope the whole extension to that layer instead of the actual project root. Root detection now prefers the outermost matching ancestor. The duplicate implementation of this logic (one in `NuxtIntellisense`, one in `FileUtils`) has also been consolidated into a single `FileUtils.findNuxtProjectRoot`.
-- `middleware`/`layout` usages declared in `definePageMeta({ ... })` were missed whenever an *earlier* property in the same object was itself a nested object (e.g. the newer `layout: { name, props }` form) — the regex used to isolate the `definePageMeta` object stopped at the first `}` it found, which belonged to the nested object, cutting off everything declared after it (including `middleware: '...'`). Parsing now walks balanced braces instead (new `TextUtils.extractBalancedBlock`). The object form of `layout` (`layout: { name: 'x', props: {...} }`) is also now detected, not just the plain string form.
+- `middleware`/`layout` usages declared in `definePageMeta({ ... })` were missed whenever an _earlier_ property in the same object was itself a nested object (e.g. the newer `layout: { name, props }` form) — the regex used to isolate the `definePageMeta` object stopped at the first `}` it found, which belonged to the nested object, cutting off everything declared after it (including `middleware: '...'`). Parsing now walks balanced braces instead (new `TextUtils.extractBalancedBlock`). The object form of `layout` (`layout: { name: 'x', props: {...} }`) is also now detected, not just the plain string form.
 - Component usages inside `app.vue` and `error.vue` were never counted — these two files were explicitly skipped while scanning for component tags, even though `app.vue` routinely uses components (`<NuxtLayout>`, custom components, ...).
 - Middleware referenced via Nitro `routeRules`' `appMiddleware` (string or array form) was not detected at all, whether declared directly in `nuxt.config.ts` or in a separate file imported into it (e.g. `app/config/route-rules.config.ts`) — the search now covers this pattern project-wide, without excluding the normally-ignored `config/` folder for this specific case.
 - Same fix applied to layouts referenced via `routeRules`' `appLayout` (Nuxt 3.21+/4.3+).
