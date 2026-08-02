@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.3] - 2026-08-01
+
+### Fixed
+
+- The "Nuxt Structure" view was visible even in workspaces without a `nuxt.config.js`/`.ts` (any open folder would show it, using the workspace root as a fallback). Since VS Code 1.74, views and commands declared in `contributes` implicitly activate the extension on their own — independently of the `workspaceContains:nuxt.config.*` activation events — so the view's real content depended entirely on whether a project root was actually detected, with no visual indication when it wasn't. A `nuxtIntellisense.isNuxtProject` context key now gates the view's visibility (`when` clause) so it only appears on genuine Nuxt projects.
+
 ## [0.8.2] - 2026-08-01
 
 ### Security

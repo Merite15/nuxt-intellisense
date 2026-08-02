@@ -3,7 +3,7 @@
   "license": "MIT",
   "displayName": "Nuxt Intellisense",
   "description": "Enhanced IntelliSense for Nuxt3 projects",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "publisher": "MeriteK",
   "changelog": "CHANGELOG.md",
   "engines": {
@@ -98,7 +98,8 @@
           "id": "nuxtIntellisenseExplorer",
           "name": "Nuxt Structure",
           "icon": "images/logo.png",
-          "contextualTitle": "Nuxt Intellisense"
+          "contextualTitle": "Nuxt Intellisense",
+          "when": "nuxtIntellisense.isNuxtProject"
         }
       ]
     },

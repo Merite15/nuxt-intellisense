@@ -21,9 +21,14 @@ export async function activate(context: vscode.ExtensionContext) {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 
   if (workspaceFolder) {
-    const nuxtProjectRoot = FileUtils.findNuxtProjectRoot(workspaceFolder.uri.fsPath) ?? workspaceFolder.uri.fsPath;
+    const detectedNuxtRoot = FileUtils.findNuxtProjectRoot(workspaceFolder.uri.fsPath);
 
-    const explorerProvider = new NuxtExplorerProvider(nuxtProjectRoot);
+    // Contrôle la visibilité de la vue "Nuxt Structure" (clause `when` dans package.json) :
+    // elle ne doit apparaître que sur un vrai projet Nuxt, pas sur n'importe quel dossier
+    // ouvert faute de nuxt.config détecté.
+    vscode.commands.executeCommand('setContext', 'nuxtIntellisense.isNuxtProject', detectedNuxtRoot !== null);
+
+    const explorerProvider = new NuxtExplorerProvider(detectedNuxtRoot ?? workspaceFolder.uri.fsPath);
 
     context.subscriptions.push(
       vscode.window.registerTreeDataProvider('nuxtIntellisenseExplorer', explorerProvider),
