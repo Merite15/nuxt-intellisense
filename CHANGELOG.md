@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.2] - 2026-08-02
+
+### Changed
+
+- New extension icon: a magnifying glass framing the official Nuxt logo, replacing the previous generic mountain-silhouette artwork — better reflects what the extension actually does (inspecting/searching your Nuxt project) and reads more clearly at small sizes (Marketplace listing, Extensions panel, activity indicators).
+
 ## [0.9.1] - 2026-08-02
 
 ### Added

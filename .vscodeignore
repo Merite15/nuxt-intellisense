@@ -11,3 +11,4 @@ tsconfig.json
 .gitignore
 pnpm-lock.yaml
 pnpm-workspace.yaml
+images/concepts/**
