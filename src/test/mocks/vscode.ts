@@ -113,6 +113,10 @@ export class EventEmitter<T> {
             listener(value);
         }
     }
+
+    dispose(): void {
+        this.listeners = [];
+    }
 }
 
 export enum DiagnosticSeverity {

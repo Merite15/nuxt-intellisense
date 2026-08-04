@@ -45,9 +45,27 @@ export class NuxtHoverProvider implements vscode.HoverProvider {
 
         const references = await this.componentService.findComponentReferences(pascalName);
         const count = references.length;
+        const { props, slots } = await this.componentService.getComponentMetadata(filePath);
 
         const markdown = new vscode.MarkdownString();
         markdown.appendMarkdown(`**$(package) ${pascalName}** — ${count} reference${count > 1 ? 's' : ''}\n\n`);
+
+        if (props.length > 0) {
+            markdown.appendMarkdown(`**Props**\n\n`);
+            for (const prop of props) {
+                markdown.appendMarkdown(`- \`${prop.name}\`${prop.required ? '' : '?'}: \`${prop.type}\`\n`);
+            }
+            markdown.appendMarkdown('\n');
+        }
+
+        if (slots.length > 0) {
+            markdown.appendMarkdown(`**Slots**\n\n`);
+            for (const slot of slots) {
+                markdown.appendMarkdown(`- \`${slot.name}\`\n`);
+            }
+            markdown.appendMarkdown('\n');
+        }
+
         markdown.appendMarkdown(`[Open definition](${vscode.Uri.file(filePath)})`);
         markdown.isTrusted = true;
         markdown.supportThemeIcons = true;

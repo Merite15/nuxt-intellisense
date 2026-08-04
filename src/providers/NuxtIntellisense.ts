@@ -25,6 +25,13 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
     private readonly phantomReferenceDiagnostics: vscode.DiagnosticCollection =
         vscode.languages.createDiagnosticCollection('nuxt-intellisense-phantom-reference');
 
+    // VS Code n'appelle provideCodeLenses à nouveau que si le document actif change
+    // ou si ce provider signale explicitement un changement via cet event : sans lui,
+    // un compteur de références restait figé tant qu'on ne rééditait pas le fichier
+    // du composant lui-même, même après invalidation de ses caches internes.
+    private readonly onDidChangeCodeLensesEmitter = new vscode.EventEmitter<void>();
+    public readonly onDidChangeCodeLenses = this.onDidChangeCodeLensesEmitter.event;
+
     private componentService?: ComponentService;
 
     private composableService?: ComposableService;
@@ -48,6 +55,7 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
     private initializeServices() {
         if (this.nuxtProjectRoot) {
             this.componentService = new ComponentService(this.nuxtProjectRoot);
+            this.componentService.onDidChangeReferences(() => this.onDidChangeCodeLensesEmitter.fire());
             this.composableService = new ComposableService(this.nuxtProjectRoot);
             this.pluginService = new PluginService(this.nuxtProjectRoot);
             this.middlewareService = new MiddlewareService();
@@ -309,5 +317,6 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
         this.pageMetaValidationService?.dispose();
         this.unusedDiagnostics.dispose();
         this.phantomReferenceDiagnostics.dispose();
+        this.onDidChangeCodeLensesEmitter.dispose();
     }
 }

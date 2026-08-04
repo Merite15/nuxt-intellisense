@@ -4,6 +4,7 @@ import * as path from 'path';
 import { PathUtils } from '../utils/pathUtils';
 import { FileUtils } from '../utils/fileUtils';
 import { TextUtils } from '../utils/textUtils';
+import { ComponentMetadata, ComponentPropInfo, ComponentSlotInfo } from '../types';
 
 interface ReferenceCache {
     references: vscode.Location[];
@@ -13,6 +14,11 @@ interface ReferenceCache {
 interface ComponentDirsCache {
     dirs: string[];
     timestamp: number;
+}
+
+interface MetadataCache {
+    metadata: ComponentMetadata;
+    mtimeMs: number;
 }
 
 export class ComponentService {
@@ -25,6 +31,14 @@ export class ComponentService {
     private initialized: boolean = false;
     private duplicateNamesCache: { names: Map<string, string[]>, timestamp: number } | null = null;
     private duplicateNamesCacheTTL: number = 600000; // 10 minutes, aligné sur le cache des répertoires
+    private metadataCache: Map<string, MetadataCache> = new Map();
+
+    // Un fichier Vue quelconque (page, layout, autre composant, app.vue...) peut
+    // ajouter ou retirer une référence à un composant. On ne peut donc pas savoir
+    // à l'avance quelles entrées du cache de références sont concernées : on notifie
+    // les CodeLens/Hover pour qu'ils se recalculent après invalidation.
+    private readonly onDidChangeReferencesEmitter = new vscode.EventEmitter<void>();
+    public readonly onDidChangeReferences = this.onDidChangeReferencesEmitter.event;
 
     constructor(
         private nuxtProjectRoot: string
@@ -49,45 +63,43 @@ export class ComponentService {
     }
 
     private setupFileWatcher() {
-        // Surveiller uniquement les fichiers Vue dans les répertoires de composants
+        // Surveiller TOUS les fichiers Vue du projet : un composant peut être
+        // référencé depuis n'importe quel fichier (page, layout, autre composant,
+        // app.vue...), pas seulement depuis components/. Se limiter à ce dossier
+        // faisait que retirer un <MonComposant /> d'une page ne rafraîchissait
+        // jamais son compteur de références.
         this.fileWatcher = vscode.workspace.createFileSystemWatcher(
-            '**/components/**/*.vue',
+            '**/*.vue',
             false, // Ne pas ignorer les créations
             false, // Ne pas ignorer les changements
             false  // Ne pas ignorer les suppressions
         );
 
-        // Lors d'un changement de fichier, invalider seulement le cache spécifique
-        this.fileWatcher.onDidChange(uri => this.invalidateSpecificCache(uri.fsPath));
-        this.fileWatcher.onDidCreate(uri => this.invalidateSpecificCache(uri.fsPath));
-        this.fileWatcher.onDidDelete(uri => this.invalidateSpecificCache(uri.fsPath));
+        this.fileWatcher.onDidChange(uri => this.invalidateOnFileEvent(uri.fsPath));
+        this.fileWatcher.onDidCreate(uri => this.invalidateOnFileEvent(uri.fsPath));
+        this.fileWatcher.onDidDelete(uri => this.invalidateOnFileEvent(uri.fsPath));
 
         // S'assurer que le watcher est disposé lorsqu'il n'est plus nécessaire
         vscode.Disposable.from(this.fileWatcher);
     }
 
     /**
-     * Invalide seulement les entrées de cache liées à un fichier spécifique
+     * Invalide les caches concernés par un fichier Vue modifié/créé/supprimé.
      */
-    private invalidateSpecificCache(filePath: string): void {
-        // Si le fichier est un composant, invalider son propre cache
-        const nuxtComponentName = this.getCachedComponentName(filePath);
-        if (nuxtComponentName) {
-            // Supprimer toutes les entrées de cache qui contiennent ce nom de composant
-            const keysToRemove: string[] = [];
-            for (const cacheKey of this.referenceCache.keys()) {
-                if (cacheKey.includes(nuxtComponentName)) {
-                    keysToRemove.push(cacheKey);
-                }
-            }
+    private invalidateOnFileEvent(filePath: string): void {
+        // N'importe quel fichier peut avoir gagné ou perdu une référence à
+        // n'importe quel composant : impossible de cibler précisément une entrée,
+        // donc on vide tout le cache de références plutôt que de risquer un
+        // compteur périmé.
+        this.referenceCache.clear();
 
-            keysToRemove.forEach(key => {
-                this.referenceCache.delete(key);
-            });
-        }
+        // Le fichier lui-même a pu changer de props/slots.
+        this.metadataCache.delete(filePath);
 
         // Un fichier créé/déplacé/supprimé peut changer l'ensemble des noms en conflit
         this.duplicateNamesCache = null;
+
+        this.onDidChangeReferencesEmitter.fire();
     }
 
     async provideCodeLenses(document: vscode.TextDocument): Promise<vscode.CodeLens[]> {
@@ -617,6 +629,278 @@ export class ComponentService {
     }
 
     /**
+     * Récupère (avec cache invalidé par mtime) la liste des props et des slots
+     * déclarés par un composant. Utilisé par le hover provider pour afficher
+     * l'API d'un composant sans avoir à ouvrir son fichier.
+     */
+    public async getComponentMetadata(filePath: string): Promise<ComponentMetadata> {
+        let mtimeMs: number;
+        try {
+            mtimeMs = fs.statSync(filePath).mtimeMs;
+        } catch {
+            return { props: [], slots: [] };
+        }
+
+        const cached = this.metadataCache.get(filePath);
+        if (cached && cached.mtimeMs === mtimeMs) {
+            return cached.metadata;
+        }
+
+        let content: string;
+        try {
+            content = fs.readFileSync(filePath, 'utf-8');
+        } catch {
+            return { props: [], slots: [] };
+        }
+
+        const metadata: ComponentMetadata = {
+            props: this.extractProps(content),
+            slots: this.extractSlots(content)
+        };
+
+        this.metadataCache.set(filePath, { metadata, mtimeMs });
+
+        return metadata;
+    }
+
+    /**
+     * Analyse par regex (pas un vrai parseur AST) des formes usuelles de
+     * `defineProps` : générique typé (`defineProps<{...}>()` ou
+     * `defineProps<Props>()` avec `Props` défini via `interface`/`type` dans le
+     * même `<script>`), objet runtime (`defineProps({...})`) et tableau de noms
+     * (`defineProps([...])`).
+     */
+    private extractProps(content: string): ComponentPropInfo[] {
+        const definePropsMatch = /defineProps\s*(<|\()/.exec(content);
+        if (!definePropsMatch) {
+            return [];
+        }
+
+        if (definePropsMatch[1] === '<') {
+            const genericStart = definePropsMatch.index + definePropsMatch[0].length;
+            const afterOpenBracket = content.slice(genericStart).search(/\S/);
+            const typeStartIndex = genericStart + (afterOpenBracket === -1 ? 0 : afterOpenBracket);
+
+            if (content[typeStartIndex] === '{') {
+                const block = TextUtils.extractBalancedBlock(content, typeStartIndex);
+                if (block) {
+                    return this.parseTypeLiteralProps(block.slice(1, -1));
+                }
+                return [];
+            }
+
+            const typeNameMatch = /^([A-Za-z_$][\w$]*)/.exec(content.slice(typeStartIndex));
+            if (typeNameMatch) {
+                const typeName = typeNameMatch[1];
+
+                const interfaceRegex = new RegExp(`interface\\s+${typeName}\\s*\\{`);
+                const interfaceMatch = interfaceRegex.exec(content);
+                if (interfaceMatch) {
+                    const braceIndex = interfaceMatch.index + interfaceMatch[0].length - 1;
+                    const block = TextUtils.extractBalancedBlock(content, braceIndex);
+                    if (block) {
+                        return this.parseTypeLiteralProps(block.slice(1, -1));
+                    }
+                }
+
+                const typeAliasRegex = new RegExp(`type\\s+${typeName}\\s*=\\s*\\{`);
+                const typeAliasMatch = typeAliasRegex.exec(content);
+                if (typeAliasMatch) {
+                    const braceIndex = typeAliasMatch.index + typeAliasMatch[0].length - 1;
+                    const block = TextUtils.extractBalancedBlock(content, braceIndex);
+                    if (block) {
+                        return this.parseTypeLiteralProps(block.slice(1, -1));
+                    }
+                }
+            }
+
+            return [];
+        }
+
+        // Forme runtime : defineProps({...}) ou defineProps([...])
+        const parenStart = definePropsMatch.index + definePropsMatch[0].length;
+        const afterParen = content.slice(parenStart).search(/\S/);
+        const argStartIndex = parenStart + (afterParen === -1 ? 0 : afterParen);
+
+        if (content[argStartIndex] === '{') {
+            const block = TextUtils.extractBalancedBlock(content, argStartIndex);
+            if (block) {
+                return this.parseRuntimeObjectProps(block.slice(1, -1));
+            }
+        } else if (content[argStartIndex] === '[') {
+            const closeIndex = content.indexOf(']', argStartIndex);
+            if (closeIndex !== -1) {
+                const arrayContent = content.slice(argStartIndex + 1, closeIndex);
+                const names = [...arrayContent.matchAll(/(['"`])([\w-]+)\1/g)].map(m => m[2]);
+                return names.map(name => ({ name, type: 'unknown', required: false }));
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Parse le contenu d'un littéral de type `{ foo: string; bar?: number }`.
+     */
+    private parseTypeLiteralProps(objectContent: string): ComponentPropInfo[] {
+        const props: ComponentPropInfo[] = [];
+        let depth = 0;
+        let i = 0;
+
+        while (i < objectContent.length) {
+            const char = objectContent[i];
+
+            if (char === '{' || char === '[' || char === '(' || char === '<') {
+                depth++;
+                i++;
+                continue;
+            }
+            if (char === '}' || char === ']' || char === ')' || char === '>') {
+                depth--;
+                i++;
+                continue;
+            }
+
+            if (depth === 0) {
+                const propMatch = /^([A-Za-z_$][\w$]*)(\?)?\s*:\s*/.exec(objectContent.slice(i));
+                if (propMatch) {
+                    const name = propMatch[1];
+                    const optional = propMatch[2] === '?';
+                    const valueStart = i + propMatch[0].length;
+
+                    // La valeur (type) s'étend jusqu'à la prochaine `;`/`,` de
+                    // profondeur 0, ou jusqu'à la fin du contenu.
+                    let j = valueStart;
+                    let valueDepth = 0;
+                    while (j < objectContent.length) {
+                        const c = objectContent[j];
+                        if (c === '{' || c === '[' || c === '(' || c === '<') valueDepth++;
+                        else if (c === '}' || c === ']' || c === ')' || c === '>') valueDepth--;
+                        else if (valueDepth === 0 && (c === ';' || c === ',' || c === '\n')) break;
+                        j++;
+                    }
+
+                    const type = objectContent.slice(valueStart, j).trim().replace(/,$/, '');
+
+                    props.push({ name, type: type || 'unknown', required: !optional });
+
+                    i = j;
+                    continue;
+                }
+            }
+
+            i++;
+        }
+
+        return props;
+    }
+
+    /**
+     * Parse le contenu d'un objet runtime `{ foo: String, bar: { type: Number,
+     * required: true } }`.
+     */
+    private parseRuntimeObjectProps(objectContent: string): ComponentPropInfo[] {
+        const props: ComponentPropInfo[] = [];
+        let depth = 0;
+        let i = 0;
+
+        while (i < objectContent.length) {
+            const char = objectContent[i];
+
+            if (char === '{' || char === '[' || char === '(') {
+                depth++;
+                i++;
+                continue;
+            }
+            if (char === '}' || char === ']' || char === ')') {
+                depth--;
+                i++;
+                continue;
+            }
+
+            if (depth === 0) {
+                const keyMatch = /^(['"`]?)([A-Za-z_$][\w$]*)\1\s*:\s*/.exec(objectContent.slice(i));
+                if (keyMatch) {
+                    const name = keyMatch[2];
+                    const valueStart = i + keyMatch[0].length;
+
+                    if (objectContent[valueStart] === '{') {
+                        const block = TextUtils.extractBalancedBlock(objectContent, valueStart);
+                        if (block) {
+                            const inner = block.slice(1, -1);
+                            const typeMatch = /type\s*:\s*(\[[^\]]*\]|[A-Za-z_$][\w$]*)/.exec(inner);
+                            const requiredMatch = /required\s*:\s*true/.exec(inner);
+
+                            props.push({
+                                name,
+                                type: typeMatch ? typeMatch[1].replace(/\s+/g, ' ') : 'unknown',
+                                required: !!requiredMatch
+                            });
+
+                            i = valueStart + block.length;
+                            continue;
+                        }
+                    }
+
+                    // Forme courte : `foo: String` ou `foo: [String, Number]`
+                    let j = valueStart;
+                    let valueDepth = 0;
+                    while (j < objectContent.length) {
+                        const c = objectContent[j];
+                        if (c === '{' || c === '[' || c === '(') valueDepth++;
+                        else if (c === '}' || c === ']' || c === ')') valueDepth--;
+                        else if (valueDepth === 0 && c === ',') break;
+                        j++;
+                    }
+
+                    const type = objectContent.slice(valueStart, j).trim();
+
+                    props.push({ name, type: type || 'unknown', required: false });
+
+                    i = j;
+                    continue;
+                }
+            }
+
+            i++;
+        }
+
+        return props;
+    }
+
+    /**
+     * Repère les `<slot>` déclarés dans le `<template>` du composant (le slot
+     * implicite est nommé "default").
+     */
+    private extractSlots(content: string): ComponentSlotInfo[] {
+        const templateMatch = /<template[^>]*>/.exec(content);
+        if (!templateMatch) {
+            return [];
+        }
+
+        const templateStart = templateMatch.index + templateMatch[0].length;
+        const templateEndMatch = /<\/template>\s*$/m.exec(content);
+        const templateEnd = templateEndMatch ? templateEndMatch.index : content.length;
+        const templateContent = content.slice(templateStart, templateEnd);
+
+        const slotRegex = /<slot\b([^>]*)\/?>/g;
+        const slots = new Map<string, ComponentSlotInfo>();
+        let match: RegExpExecArray | null;
+
+        while ((match = slotRegex.exec(templateContent)) !== null) {
+            const attrs = match[1];
+            const nameMatch = /\bname\s*=\s*(['"`])([\w-]+)\1/.exec(attrs);
+            const name = nameMatch ? nameMatch[2] : 'default';
+
+            if (!slots.has(name)) {
+                slots.set(name, { name });
+            }
+        }
+
+        return [...slots.values()];
+    }
+
+    /**
      * Invalide le cache complètement (à utiliser avec parcimonie)
      */
     public invalidateAllCaches(): void {
@@ -627,6 +911,8 @@ export class ComponentService {
         this.componentNameCache.clear();
 
         this.duplicateNamesCache = null;
+
+        this.metadataCache.clear();
     }
 
     // S'assurer que les ressources sont libérées lorsqu'elles ne sont plus nécessaires
@@ -634,5 +920,6 @@ export class ComponentService {
         if (this.fileWatcher) {
             this.fileWatcher.dispose();
         }
+        this.onDidChangeReferencesEmitter.dispose();
     }
 }

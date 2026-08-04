@@ -19,3 +19,18 @@ export interface NuxtComponentInfo {
         variables?: string[];
     };
 }
+
+export interface ComponentPropInfo {
+    name: string;
+    type: string;
+    required: boolean;
+}
+
+export interface ComponentSlotInfo {
+    name: string;
+}
+
+export interface ComponentMetadata {
+    props: ComponentPropInfo[];
+    slots: ComponentSlotInfo[];
+}
