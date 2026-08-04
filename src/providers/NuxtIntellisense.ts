@@ -27,10 +27,20 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
 
     // VS Code n'appelle provideCodeLenses à nouveau que si le document actif change
     // ou si ce provider signale explicitement un changement via cet event : sans lui,
-    // un compteur de références restait figé tant qu'on ne rééditait pas le fichier
-    // du composant lui-même, même après invalidation de ses caches internes.
+    // un compteur de références (composant, composable, store, util, plugin...)
+    // restait figé tant qu'on ne rééditait pas le fichier concerné lui-même, même
+    // après invalidation correcte des caches internes de chaque service par leurs
+    // propres file watchers.
     private readonly onDidChangeCodeLensesEmitter = new vscode.EventEmitter<void>();
     public readonly onDidChangeCodeLenses = this.onDidChangeCodeLensesEmitter.event;
+
+    // Watcher unique et générique (plutôt qu'un event dédié par service) : dès
+    // qu'un fichier Vue/TS/JS du projet change, n'importe quel compteur de
+    // référence peut être concerné, donc on redemande simplement les CodeLens à
+    // VS Code. Débouncé pour éviter une rafale d'appels lors d'opérations
+    // multi-fichiers (rename, git checkout...).
+    private codeLensRefreshWatcher?: vscode.FileSystemWatcher;
+    private codeLensRefreshDebounceTimer?: NodeJS.Timeout;
 
     private componentService?: ComponentService;
 
@@ -55,7 +65,6 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
     private initializeServices() {
         if (this.nuxtProjectRoot) {
             this.componentService = new ComponentService(this.nuxtProjectRoot);
-            this.componentService.onDidChangeReferences(() => this.onDidChangeCodeLensesEmitter.fire());
             this.composableService = new ComposableService(this.nuxtProjectRoot);
             this.pluginService = new PluginService(this.nuxtProjectRoot);
             this.middlewareService = new MiddlewareService();
@@ -65,7 +74,31 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
             this.serverApiService = new ServerApiService();
             this.serverMiddlewarePluginService = new ServerMiddlewarePluginService(this.nuxtProjectRoot);
             this.pageMetaValidationService = new PageMetaValidationService(this.nuxtProjectRoot);
+
+            this.setupCodeLensRefreshWatcher();
         }
+    }
+
+    /**
+     * Chaque service invalide déjà correctement son propre cache quand un fichier
+     * pertinent change ; il ne manquait que le signal à VS Code pour qu'il
+     * redemande les CodeLens du document actuellement affiché.
+     */
+    private setupCodeLensRefreshWatcher(): void {
+        this.codeLensRefreshWatcher = vscode.workspace.createFileSystemWatcher('**/*.{vue,ts,js}');
+
+        const scheduleRefresh = () => {
+            if (this.codeLensRefreshDebounceTimer) {
+                clearTimeout(this.codeLensRefreshDebounceTimer);
+            }
+            this.codeLensRefreshDebounceTimer = setTimeout(() => {
+                this.onDidChangeCodeLensesEmitter.fire();
+            }, 300);
+        };
+
+        this.codeLensRefreshWatcher.onDidChange(scheduleRefresh);
+        this.codeLensRefreshWatcher.onDidCreate(scheduleRefresh);
+        this.codeLensRefreshWatcher.onDidDelete(scheduleRefresh);
     }
 
     async provideCodeLenses(document: vscode.TextDocument): Promise<vscode.CodeLens[]> {
@@ -318,5 +351,9 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
         this.unusedDiagnostics.dispose();
         this.phantomReferenceDiagnostics.dispose();
         this.onDidChangeCodeLensesEmitter.dispose();
+        this.codeLensRefreshWatcher?.dispose();
+        if (this.codeLensRefreshDebounceTimer) {
+            clearTimeout(this.codeLensRefreshDebounceTimer);
+        }
     }
 }

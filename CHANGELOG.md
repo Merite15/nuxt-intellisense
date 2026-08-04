@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.5] - 2026-08-04
+
+### Fixed
+
+- None of the CodeLens-based reference counts (components, composables, stores, utils, plugins, server API/middleware) ever refreshed on their own when the count-changing edit happened in a *different* file: `NuxtIntellisense` never implemented `onDidChangeCodeLenses`, so VS Code only re-requested a document's CodeLenses when that exact document was reopened or edited, regardless of whether the underlying service had already correctly invalidated its cache. A single project-wide watcher now signals VS Code to re-request CodeLenses (debounced) whenever any `.vue`/`.ts`/`.js` file changes. Supersedes the component-specific event added in 0.9.4.
+
 ## [0.9.4] - 2026-08-04
 
 ### Added
@@ -10,7 +16,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- A component's reference count only refreshed when its own file was edited: `ComponentService`'s file watcher only covered `**/components/**/*.vue`, so removing a `<MyComponent />` usage from a page, layout, or `app.vue` never invalidated the cached count, and there was no `onDidChangeCodeLenses` signal to make VS Code ask for it again anyway (it would silently go stale for up to the 5-minute cache TTL, then still not refresh until the component file itself was reopened/edited). The watcher now covers every `.vue` file in the project, and the CodeLens provider re-requests lenses as soon as it fires.
+- A component's reference count only refreshed when its own file was edited: `ComponentService`'s file watcher only covered `**/components/**/*.vue`, so removing a `<MyComponent />` usage from a page, layout, or `app.vue` never invalidated the cached count. The watcher now covers every `.vue` file in the project, matching the other services.
 
 ## [0.9.3] - 2026-08-02
 

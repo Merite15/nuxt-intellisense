@@ -33,13 +33,6 @@ export class ComponentService {
     private duplicateNamesCacheTTL: number = 600000; // 10 minutes, aligné sur le cache des répertoires
     private metadataCache: Map<string, MetadataCache> = new Map();
 
-    // Un fichier Vue quelconque (page, layout, autre composant, app.vue...) peut
-    // ajouter ou retirer une référence à un composant. On ne peut donc pas savoir
-    // à l'avance quelles entrées du cache de références sont concernées : on notifie
-    // les CodeLens/Hover pour qu'ils se recalculent après invalidation.
-    private readonly onDidChangeReferencesEmitter = new vscode.EventEmitter<void>();
-    public readonly onDidChangeReferences = this.onDidChangeReferencesEmitter.event;
-
     constructor(
         private nuxtProjectRoot: string
     ) {
@@ -98,8 +91,6 @@ export class ComponentService {
 
         // Un fichier créé/déplacé/supprimé peut changer l'ensemble des noms en conflit
         this.duplicateNamesCache = null;
-
-        this.onDidChangeReferencesEmitter.fire();
     }
 
     async provideCodeLenses(document: vscode.TextDocument): Promise<vscode.CodeLens[]> {
@@ -920,6 +911,5 @@ export class ComponentService {
         if (this.fileWatcher) {
             this.fileWatcher.dispose();
         }
-        this.onDidChangeReferencesEmitter.dispose();
     }
 }
