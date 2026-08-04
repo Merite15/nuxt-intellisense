@@ -83,6 +83,31 @@ describe('TextUtils', () => {
         });
     });
 
+    describe('extractTopLevelKeys', () => {
+        it('extracts keys from a route-table style object, ignoring nested values', () => {
+            const content = `
+    Dashboard: '/dashboard',
+    User: '/dashboard/users',
+    Shipment: '/dashboard/shipments',
+    Nested: { notATopLevelKey: '/should-not-appear' }
+`;
+            const keys = TextUtils.extractTopLevelKeys(content).map(k => k.name);
+            assert.deepStrictEqual(keys, ['Dashboard', 'User', 'Shipment', 'Nested']);
+        });
+
+        it('supports quoted keys', () => {
+            const content = `'kebab-key': 1, "another-key": 2`;
+            const keys = TextUtils.extractTopLevelKeys(content).map(k => k.name);
+            assert.deepStrictEqual(keys, ['kebab-key', 'another-key']);
+        });
+
+        it('does not pick up a colon inside a string value as a new key', () => {
+            const content = `Ratio: 'width:height'`;
+            const keys = TextUtils.extractTopLevelKeys(content).map(k => k.name);
+            assert.deepStrictEqual(keys, ['Ratio']);
+        });
+    });
+
     describe('removeDuplicateReferences', () => {
         it('removes references pointing to the exact same location', () => {
             const uri = Uri.file('/project/pages/index.vue');

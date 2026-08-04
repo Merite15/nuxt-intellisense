@@ -11,6 +11,7 @@ import { ServerApiService } from '../services/ServerApiService';
 import { ServerMiddlewarePluginService } from '../services/ServerMiddlewarePluginService';
 import { PageMetaValidationService } from '../services/PageMetaValidationService';
 import { FileUtils } from '../utils/fileUtils';
+import { TextUtils } from '../utils/textUtils';
 import { NuxtComponentInfo } from '../types';
 
 export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposable {
@@ -176,14 +177,15 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
 
                 let match: RegExpExecArray | null;
 
-                const exportsFound: { exportType: string, name: string, pos: vscode.Position, matchText: string }[] = [];
+                const exportsFound: { exportType: string, name: string, pos: vscode.Position, matchText: string, matchEnd: number }[] = [];
 
                 while ((match = utilsRegex.exec(text))) {
                     exportsFound.push({
                         exportType: match[1],
                         name: match[2],
                         pos: document.positionAt(match.index),
-                        matchText: match[0]
+                        matchText: match[0],
+                        matchEnd: match.index + match[0].length
                     });
                 }
 
@@ -194,7 +196,7 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
                     exportsFound.map(e => ({ name: e.name, position: e.pos }))
                 );
 
-                for (const { exportType, name, pos, matchText } of exportsFound) {
+                for (const { exportType, name, pos, matchText, matchEnd } of exportsFound) {
                     const range = new vscode.Range(pos.line, 0, pos.line, 0);
 
                     // Icône selon le type d'export
@@ -225,6 +227,15 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
                             ]
                         })
                     );
+                    if (referenceCount === 0) {
+                        lenses.push(TextUtils.buildSearchInWorkspaceLens(range, name));
+                    }
+
+                    if (exportType === 'const') {
+                        const objectMemberLenses = await this.provideObjectMemberLenses(document, text, name, matchEnd);
+
+                        lenses.push(...objectMemberLenses);
+                    }
                 }
             }
             if (fileInfo.isPage && this.pageMetaValidationService) {
@@ -237,6 +248,84 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
         }
 
         this.updateUnusedDiagnostics(document, lenses);
+
+        return lenses;
+    }
+
+    /**
+     * Pour un export `const NAME = { ... }` (typiquement une table de routes/constantes,
+     * optionnellement suivie de `as const`), ajoute un CodeLens par propriété de premier
+     * niveau montrant combien de fois `NAME.propriete` (ou `NAME['propriete']`) est
+     * utilisé ailleurs dans le projet — même principe que les membres de store, mais
+     * pour n'importe quel objet exporté depuis `utils/`.
+     */
+    private async provideObjectMemberLenses(
+        document: vscode.TextDocument,
+        text: string,
+        objectName: string,
+        searchFrom: number
+    ): Promise<vscode.CodeLens[]> {
+        if (!this.utilsService) {
+            return [];
+        }
+
+        // Le premier `{` après le `=` est le début du littéral objet, à condition
+        // qu'aucun autre token significatif (identifiant, `(`, `[`...) ne le précède
+        // — ce qui exclurait un appel de fonction, une fonction fléchée, etc.
+        const afterExport = text.slice(searchFrom);
+        const assignMatch = /^\s*(?::[^=]+)?=\s*/.exec(afterExport);
+        if (!assignMatch) {
+            return [];
+        }
+
+        const valueStart = searchFrom + assignMatch[0].length;
+        if (text[valueStart] !== '{') {
+            return [];
+        }
+
+        const block = TextUtils.extractBalancedBlock(text, valueStart);
+        if (!block) {
+            return [];
+        }
+
+        const innerContent = block.slice(1, -1);
+        const keys = TextUtils.extractTopLevelKeys(innerContent);
+        if (keys.length === 0) {
+            return [];
+        }
+
+        const referencesByMember = await this.utilsService.findObjectMemberReferences(
+            objectName,
+            keys.map(k => k.name)
+        );
+
+        const lenses: vscode.CodeLens[] = [];
+
+        for (const { name: memberName, index } of keys) {
+            const absoluteIndex = valueStart + 1 + index;
+            const memberPos = document.positionAt(absoluteIndex);
+            const range = new vscode.Range(memberPos.line, 0, memberPos.line, 0);
+
+            const references = TextUtils.removeDuplicateReferences(referencesByMember.get(memberName) || []);
+            const referenceCount = references.length;
+
+            lenses.push(
+                new vscode.CodeLens(range, {
+                    title: `$(symbol-field) ${memberName} • ${referenceCount} reference${referenceCount !== 1 ? 's' : ''}`,
+                    command: 'editor.action.showReferences',
+                    arguments: [
+                        document.uri,
+                        memberPos,
+                        references
+                    ],
+                    tooltip: `Property of ${objectName}\nClick to show references`
+                })
+            );
+
+            if (referenceCount === 0) {
+                lenses.push(TextUtils.buildSearchInWorkspaceLens(range, `${objectName}.${memberName}`));
+            }
+        }
 
         return lenses;
     }

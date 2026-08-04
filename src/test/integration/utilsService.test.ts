@@ -90,4 +90,25 @@ const message = "Please search carefully before submitting";
 
         assert.strictEqual(refs.length, 0);
     });
+
+    it('counts per-property usages of an exported route-table object (dot and bracket access)', async () => {
+        const consumerDir = path.join(tmpDir, 'pages');
+        fs.mkdirSync(consumerDir);
+        fs.writeFileSync(
+            path.join(consumerDir, 'shipments.vue'),
+            `<script setup lang="ts">
+import { DashboardModuleRoutes } from '~/utils/routes';
+navigateTo(DashboardModuleRoutes.Shipment);
+navigateTo(DashboardModuleRoutes.Shipment);
+navigateTo(DashboardModuleRoutes['Order']);
+</script>
+`
+        );
+
+        const refsByMember = await service.findObjectMemberReferences('DashboardModuleRoutes', ['Shipment', 'Order', 'Refund']);
+
+        assert.strictEqual(refsByMember.get('Shipment')?.length, 2);
+        assert.strictEqual(refsByMember.get('Order')?.length, 1);
+        assert.strictEqual(refsByMember.get('Refund')?.length, 0);
+    });
 });

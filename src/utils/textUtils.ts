@@ -105,6 +105,62 @@ export class TextUtils {
         });
     }
 
+    /**
+     * Énumère les clés `nom:` situées directement au premier niveau du contenu d'un
+     * objet (pas dans un objet/tableau/fonction imbriqué), en ignorant le contenu
+     * des chaînes de caractères pour éviter les faux positifs. `objectContent` ne
+     * doit pas inclure les accolades englobantes.
+     */
+    static extractTopLevelKeys(objectContent: string): { name: string; index: number }[] {
+        const keys: { name: string; index: number }[] = [];
+        let depth = 0;
+        let i = 0;
+
+        while (i < objectContent.length) {
+            const char = objectContent[i];
+
+            if (char === '{' || char === '[' || char === '(') {
+                depth++;
+                i++;
+                continue;
+            }
+
+            if (char === '}' || char === ']' || char === ')') {
+                depth--;
+                i++;
+                continue;
+            }
+
+            // Essayer une clé (quotée ou non) avant le skip générique de chaîne
+            // ci-dessous : sinon le guillemet ouvrant d'une clé quotée ("kebab-key": 1)
+            // serait consommé comme une chaîne quelconque avant d'atteindre ce test.
+            if (depth === 0) {
+                const keyMatch = /^(?:([A-Za-z_$][\w$]*)|(['"`])([^'"`]+)\2)\s*:/.exec(objectContent.slice(i));
+                if (keyMatch) {
+                    const name = keyMatch[1] ?? keyMatch[3];
+                    keys.push({ name, index: i });
+                    i += keyMatch[0].length;
+                    continue;
+                }
+            }
+
+            if (char === "'" || char === '"' || char === '`') {
+                const quote = char;
+                i++;
+                while (i < objectContent.length && objectContent[i] !== quote) {
+                    if (objectContent[i] === '\\') i++;
+                    i++;
+                }
+                i++;
+                continue;
+            }
+
+            i++;
+        }
+
+        return keys;
+    }
+
     static removeDuplicateReferences(references: vscode.Location[]): vscode.Location[] {
         const uniqueRefs: vscode.Location[] = [];
         const seen = new Set<string>();

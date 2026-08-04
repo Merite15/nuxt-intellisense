@@ -2,7 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.6] - 2026-08-04
+
+### Changed
+
+- **Documentation**: README now covers the per-property CodeLens for exported constant objects (0.9.5) — added to the feature list and a worked example (`DashboardModuleRoutes`) showing exactly how the per-property lenses render above each key, including the 0-reference "search in workspace" companion lens.
+
 ## [0.9.5] - 2026-08-04
+
+### Added
+
+- **"Search in workspace" companion lens for utils exports**: a `utils`/`lib`/`services`/`constants`/... export (function, const, interface, type, enum, class) reporting "0 references" now also shows the `$(search)` companion lens, matching the behavior already in place for components, composables, stores, middleware and layouts.
+- **Per-property reference counts for exported constant objects**: an `export const NAME = { ... }` object (e.g. a route table like `export const DashboardModuleRoutes = { Shipment: '/dashboard/shipments', ... } as const`) now gets one CodeLens per top-level property, showing how many times `NAME.property` (or `NAME['property']`) is used across the project — same idea as the existing per-member CodeLenses on Pinia stores, extended to any plain exported object. Each 0-reference property also gets its own "search in workspace" lens.
 
 ### Fixed
 

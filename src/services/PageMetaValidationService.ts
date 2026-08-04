@@ -102,7 +102,7 @@ export class PageMetaValidationService {
         // le bloc complet) : on les retire pour que la profondeur 0 corresponde bien
         // au premier niveau de l'objet, et on décale les index en conséquence.
         const innerContent = metaContent.slice(1, -1);
-        const topLevelKeys = this.extractTopLevelKeys(innerContent).map(k => ({ name: k.name, index: k.index + 1 }));
+        const topLevelKeys = TextUtils.extractTopLevelKeys(innerContent).map(k => ({ name: k.name, index: k.index + 1 }));
 
         for (const { name, index } of topLevelKeys) {
             if (KNOWN_PAGE_META_KEYS.has(name)) {
@@ -138,57 +138,6 @@ export class PageMetaValidationService {
                 ));
             }
         }
-    }
-
-    /**
-     * Énumère les clés `nom:` situées directement au premier niveau du bloc (pas
-     * dans un objet/tableau imbriqué), en ignorant le contenu des chaînes de
-     * caractères pour éviter les faux positifs.
-     */
-    private extractTopLevelKeys(objectContent: string): { name: string; index: number }[] {
-        const keys: { name: string; index: number }[] = [];
-        let depth = 0;
-        let i = 0;
-
-        while (i < objectContent.length) {
-            const char = objectContent[i];
-
-            if (char === '{' || char === '[' || char === '(') {
-                depth++;
-                i++;
-                continue;
-            }
-
-            if (char === '}' || char === ']' || char === ')') {
-                depth--;
-                i++;
-                continue;
-            }
-
-            if (char === "'" || char === '"' || char === '`') {
-                const quote = char;
-                i++;
-                while (i < objectContent.length && objectContent[i] !== quote) {
-                    if (objectContent[i] === '\\') i++;
-                    i++;
-                }
-                i++;
-                continue;
-            }
-
-            if (depth === 0) {
-                const keyMatch = /^([A-Za-z_$][\w$]*)\s*:/.exec(objectContent.slice(i));
-                if (keyMatch) {
-                    keys.push({ name: keyMatch[1], index: i });
-                    i += keyMatch[0].length;
-                    continue;
-                }
-            }
-
-            i++;
-        }
-
-        return keys;
     }
 
     private levenshteinDistance(a: string, b: string): number {

@@ -44,14 +44,14 @@ code --install-extension MeriteK.nuxt-intellisense
   - Plugins (including custom directives)
   - Middlewares — via `definePageMeta` (string or array), Nitro `routeRules`' `appMiddleware` (string or array, wherever that config file lives), and `.global.ts` files
   - `server/api` and `server/routes` Nitro event handlers (including dynamic `[id]` segments and `.get`/`.post`/... method suffixes)
-  - Utility files such as `utils`, `lib`, `helpers`, `constants`, etc.
+  - Utility files such as `utils`, `lib`, `helpers`, `constants`, etc. — including a **per-property breakdown for exported constant objects** (e.g. a route table): each top-level property gets its own CodeLens counting `ObjectName.property` / `ObjectName['property']` usages, the same way store methods/getters already do
 
 Detection follows path **segments**, not a fixed root, so it works the same whether your project uses the Nuxt 3 layout (`components/`, `composables/`, ... at the root) or the Nuxt 4 layout (nested under `app/`), and inside local [Nuxt layers](https://nuxt.com/docs/4.x/getting-started/layers) (`layers/<name>/...`).
 
 ### Code Health
 
 - **Unused symbol detection**: any symbol with 0 detected references is flagged as a hint in the Problems panel, so dead exports are easy to spot without leaving the editor.
-- **"Search in workspace" before you delete anything**: reference counting here is regex-based, not a real parser — so any component, composable, or store CodeLens showing "0 references" comes with a companion `$(search)` lens that opens VS Code's global search pre-filled with that name, so you can double-check before removing "unused" code.
+- **"Search in workspace" before you delete anything**: reference counting here is regex-based, not a real parser — so any component, composable, store, utils export, or object property CodeLens showing "0 references" comes with a companion `$(search)` lens that opens VS Code's global search pre-filled with that name, so you can double-check before removing "unused" code.
 - **Phantom reference detection**: the inverse problem — a `middleware`/`layout` name referenced in `definePageMeta` (string, array, or object form) or in `routeRules`' `appMiddleware`/`appLayout` that doesn't match any actual file is flagged as a warning in the Problems panel. Catches typos (`middleware: 'atuh'`) that TypeScript can't see, since these are plain strings.
 - **Unknown `definePageMeta` key detection**: a key that's close to a known one (`midleware` vs `middleware`) is flagged as a likely typo, with a suggestion. Genuinely custom keys added by Nuxt modules (`requiresAuth`, i18n-specific keys, ...) are left alone — only near-misses of the core Nuxt keys are reported, to avoid false positives.
 - **Duplicate name detection**: warns when two different files would collide under Nuxt's auto-import rules, with a one-click link to the conflicting files —
@@ -136,6 +136,25 @@ export function useData() {
 ```
 
 Clicking the CodeLens opens the standard "Find References" view with all three usage locations.
+
+Exported constant objects get the same treatment, one CodeLens per property, placed directly above each key:
+
+```ts
+// utils/routes.ts
+
+// $(symbol-constant) 12 references
+export const DashboardModuleRoutes = {
+  // $(symbol-field) Dashboard • 4 references
+  Dashboard: '/dashboard',
+  // $(symbol-field) Shipment • 2 references
+  Shipment: '/dashboard/shipments',
+  // $(symbol-field) Refund • 0 references   $(search) Search "DashboardModuleRoutes.Refund" in project
+  Refund: '/dashboard/refunds',
+  // ...
+} as const
+```
+
+Each property lens counts `DashboardModuleRoutes.Shipment` and `DashboardModuleRoutes['Shipment']` usages across the project, and clicking it opens "Find References" scoped to that property alone — handy for route tables, permission maps, or any large exported constant where you want to know which entries are actually still used.
 
 ## Development & Tests
 

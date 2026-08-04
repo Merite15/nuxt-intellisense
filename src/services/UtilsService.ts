@@ -237,8 +237,63 @@ export class UtilsService {
         }
     }
 
+    private objectMemberReferenceCache: Map<string, { references: Map<string, vscode.Location[]>, timestamp: number }> = new Map();
+
+    /**
+     * Compte les usages `NAME.membre` / `NAME['membre']` d'un objet exporté (ex:
+     * `export const Routes = { Dashboard: '/dashboard', ... } as const`), une seule
+     * passe sur le workspace pour tous les membres à la fois — même logique que
+     * `findUtilsReferencesForExports`, mais au niveau propriété plutôt qu'export.
+     */
+    async findObjectMemberReferences(objectName: string, memberNames: string[]): Promise<Map<string, vscode.Location[]>> {
+        const resultsByMember = new Map<string, vscode.Location[]>();
+        for (const memberName of memberNames) {
+            resultsByMember.set(memberName, []);
+        }
+
+        if (memberNames.length === 0) {
+            return resultsByMember;
+        }
+
+        const cacheKey = `${objectName}:${memberNames.join(',')}`;
+        const now = Date.now();
+        const cached = this.objectMemberReferenceCache.get(cacheKey);
+        if (cached && (now - cached.timestamp < this.referenceCacheTTL)) {
+            return cached.references;
+        }
+
+        const uris = await vscode.workspace.findFiles(
+            '**/*.{vue,js,ts}',
+            FileUtils.buildExcludeGlob()
+        );
+
+        for (const uri of uris) {
+            let content: string;
+            try {
+                content = fs.readFileSync(uri.fsPath, 'utf-8');
+            } catch {
+                continue;
+            }
+
+            for (const memberName of memberNames) {
+                const results = resultsByMember.get(memberName)!;
+
+                const dotPattern = new RegExp(`\\b${objectName}\\.${memberName}\\b`, 'g');
+                TextUtils.findMatches(dotPattern, content, uri, results);
+
+                const bracketPattern = new RegExp(`\\b${objectName}\\[\\s*(['"\`])${memberName}\\1\\s*\\]`, 'g');
+                TextUtils.findMatches(bracketPattern, content, uri, results);
+            }
+        }
+
+        this.objectMemberReferenceCache.set(cacheKey, { references: resultsByMember, timestamp: now });
+
+        return resultsByMember;
+    }
+
     public invalidateReferenceCache(): void {
         this.documentReferenceCache.clear();
+        this.objectMemberReferenceCache.clear();
     }
 
     public dispose(): void {
