@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.4] - 2026-08-04
+
+### Added
+
+- **Props/slots preview on hover**: hovering a component tag (`<MyButton>` / `<my-button>`) now also lists the component's declared props (with their type and whether they're required) and slots, extracted from `defineProps` (generic type, inline object type, `interface`/`type` alias, or runtime object/array form) and `<slot name="...">` in its template — alongside the existing reference count.
+
+### Fixed
+
+- A component's reference count only refreshed when its own file was edited: `ComponentService`'s file watcher only covered `**/components/**/*.vue`, so removing a `<MyComponent />` usage from a page, layout, or `app.vue` never invalidated the cached count, and there was no `onDidChangeCodeLenses` signal to make VS Code ask for it again anyway (it would silently go stale for up to the 5-minute cache TTL, then still not refresh until the component file itself was reopened/edited). The watcher now covers every `.vue` file in the project, and the CodeLens provider re-requests lenses as soon as it fires.
+
 ## [0.9.3] - 2026-08-02
 
 ### Added

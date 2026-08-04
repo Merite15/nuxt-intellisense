@@ -22,6 +22,8 @@ place : caches, watchers, mock de test, `TextUtils.extractBalancedBlock`, etc.).
 |---|---|---|---|
 | **Quick Fix "Créer le fichier manquant"** | 🔴 Élevé | 🟢 Facile | Complément direct de la détection de références fantômes : un `CodeActionProvider` qui, sur le warning "aucun middleware nommé X", propose de créer `middleware/X.ts` avec un squelette `defineNuxtRouteMiddleware`. Le diagnostic existe déjà, il ne manque que l'action. |
 | **Détection des conflits de routes** | 🟠 Moyen | 🟢 Facile | Deux fichiers sous `pages/` qui résolvent à la même route (ex: `pages/users/[id].vue` et `pages/users/[slug].vue`). Même schéma que les doublons de noms déjà en place — dérivation du nom de route à partir du chemin, groupage, warning si collision. |
+| **Références fantômes de slots** | 🟠 Moyen | 🟢 Facile | Un `<template #foo>` (ou `v-slot:foo`) passé à un composant enfant dont le `<slot name="foo">` n'existe plus/pas dans sa définition (typo, ou slot retiré du parent lors d'un refacto). `ComponentService.getComponentMetadata()` extrait déjà les slots déclarés (livré avec le hover props/slots) — il ne reste qu'à résoudre le composant utilisé dans le template courant et comparer, sur le même schéma que `PageMetaValidationService`. Les slots dynamiques (`<slot :name="x">`) sont à ignorer plutôt que source de faux positifs. |
+| **Références fantômes de props** | 🟠 Moyen | 🟢 Facile | Symétrique côté props : une prop passée sur une balise (`<MyButton foo="x">`) absente de `defineProps` du composant résolu. Réutilise la même extraction que ci-dessus (`getComponentMetadata().props`). Attention aux faux positifs : attributs HTML natifs, `v-bind="obj"` dynamique, et props auto-héritées (`$attrs`) doivent être exclus. |
 
 ## Impact moyen
 
