@@ -309,6 +309,10 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
             const references = TextUtils.removeDuplicateReferences(referencesByMember.get(memberName) || []);
             const referenceCount = references.length;
 
+            if (referenceCount === 0) {
+                continue;
+            }
+
             lenses.push(
                 new vscode.CodeLens(range, {
                     title: `$(symbol-field) ${memberName} • ${referenceCount} reference${referenceCount !== 1 ? 's' : ''}`,
@@ -321,10 +325,6 @@ export class NuxtIntellisense implements vscode.CodeLensProvider, vscode.Disposa
                     tooltip: `Property of ${objectName}\nClick to show references`
                 })
             );
-
-            if (referenceCount === 0) {
-                lenses.push(TextUtils.buildSearchInWorkspaceLens(range, `${objectName}.${memberName}`));
-            }
         }
 
         return lenses;

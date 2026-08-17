@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.7] - 2026-08-17
+
+### Changed
+
+- **Per-property CodeLens now hides 0-reference entries instead of showing "0 references"**: for exported constant objects (e.g. enum-like value objects such as `AppointmentPaymentStatus`), a property that's never accessed via `Object.property` / `Object['property']` no longer gets its own CodeLens at all — it was pure noise for objects whose members are mostly used as string literals rather than dot/bracket access. The parent object's own reference-count CodeLens is unaffected and still reports its total.
+
 ## [0.9.6] - 2026-08-04
 
 ### Changed

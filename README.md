@@ -51,7 +51,7 @@ Detection follows path **segments**, not a fixed root, so it works the same whet
 ### Code Health
 
 - **Unused symbol detection**: any symbol with 0 detected references is flagged as a hint in the Problems panel, so dead exports are easy to spot without leaving the editor.
-- **"Search in workspace" before you delete anything**: reference counting here is regex-based, not a real parser — so any component, composable, store, utils export, or object property CodeLens showing "0 references" comes with a companion `$(search)` lens that opens VS Code's global search pre-filled with that name, so you can double-check before removing "unused" code.
+- **"Search in workspace" before you delete anything**: reference counting here is regex-based, not a real parser — so any component, composable, store, or utils export CodeLens showing "0 references" comes with a companion `$(search)` lens that opens VS Code's global search pre-filled with that name, so you can double-check before removing "unused" code. Object-property CodeLenses (see below) skip this: a property with 0 references simply isn't shown at all, to avoid cluttering large route/permission tables with expected zero-usage entries — the parent object's own CodeLens still reports the total.
 - **Phantom reference detection**: the inverse problem — a `middleware`/`layout` name referenced in `definePageMeta` (string, array, or object form) or in `routeRules`' `appMiddleware`/`appLayout` that doesn't match any actual file is flagged as a warning in the Problems panel. Catches typos (`middleware: 'atuh'`) that TypeScript can't see, since these are plain strings.
 - **Unknown `definePageMeta` key detection**: a key that's close to a known one (`midleware` vs `middleware`) is flagged as a likely typo, with a suggestion. Genuinely custom keys added by Nuxt modules (`requiresAuth`, i18n-specific keys, ...) are left alone — only near-misses of the core Nuxt keys are reported, to avoid false positives.
 - **Duplicate name detection**: warns when two different files would collide under Nuxt's auto-import rules, with a one-click link to the conflicting files —
@@ -137,7 +137,7 @@ export function useData() {
 
 Clicking the CodeLens opens the standard "Find References" view with all three usage locations.
 
-Exported constant objects get the same treatment, one CodeLens per property, placed directly above each key:
+Exported constant objects get the same treatment, one CodeLens per property, placed directly above each key — properties with 0 references are skipped entirely, so the object stays readable even when most entries are never accessed by dot/bracket notation (e.g. enum-style value objects):
 
 ```ts
 // utils/routes.ts
@@ -148,8 +148,7 @@ export const DashboardModuleRoutes = {
   Dashboard: '/dashboard',
   // $(symbol-field) Shipment • 2 references
   Shipment: '/dashboard/shipments',
-  // $(symbol-field) Refund • 0 references   $(search) Search "DashboardModuleRoutes.Refund" in project
-  Refund: '/dashboard/refunds',
+  Refund: '/dashboard/refunds', // no CodeLens: 0 references found
   // ...
 } as const
 ```
