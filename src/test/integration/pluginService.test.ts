@@ -171,4 +171,46 @@ export default defineNuxtPlugin((nuxtApp) => {
         const conflictLens = lenses.find(l => /\$\(warning\)/.test((l.command as any)?.title ?? ''));
         assert.strictEqual(conflictLens, undefined);
     });
+
+    it('does not flag a false conflict when two plugins provide different top-level keys with nested objects', async () => {
+        const pluginsDir = path.join(tmpDir, 'plugins');
+        fs.mkdirSync(pluginsDir);
+        fs.writeFileSync(
+            path.join(pluginsDir, 'posthog.ts'),
+            `export default defineNuxtPlugin(() => {
+  return {
+    provide: {
+      posthog: {
+        capture: (event: string, properties?: Record<string, unknown>) => enabled && posthog.capture(event, properties),
+        setPersonProperties: (properties: Record<string, unknown>) => enabled && posthog.setPersonProperties(properties),
+        reset: () => enabled && posthog.reset(),
+      },
+    },
+  };
+});
+`
+        );
+        fs.writeFileSync(
+            path.join(pluginsDir, 'clarity.ts'),
+            `export default defineNuxtPlugin(() => {
+  return {
+    provide: {
+      clarity: {
+        event: (name: string) => Clarity.event(name),
+        setTag: (key: string, value: string | string[]) => Clarity.setTag(key, value),
+        consent: (granted = true) => Clarity.consent(granted),
+        upgrade: (reason: string) => Clarity.upgrade(reason),
+      },
+    },
+  };
+});
+`
+        );
+
+        const doc = makeDocument(path.join(pluginsDir, 'posthog.ts'));
+        const lenses = await service.provideCodeLenses(doc);
+
+        const conflictLens = lenses.find(l => /\$\(warning\)/.test((l.command as any)?.title ?? ''));
+        assert.strictEqual(conflictLens, undefined);
+    });
 });

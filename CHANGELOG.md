@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.8] - 2026-08-22
+
+### Fixed
+
+- **False "provide key conflict" between unrelated plugins**: `PluginService`'s detection of duplicate `provide: { ... }` keys used a non-greedy regex to find the object body, which stopped at the *first* closing brace — so a plugin nesting its API under a sub-object (e.g. `provide: { posthog: { capture: (event: string, ...) => ... } }`) leaked identifiers found inside that nested object (including TS parameter type annotations) as if they were top-level provide keys. Two plugins each exposing an unrelated nested method named the same (e.g. both containing an `event` identifier somewhere inside, like a Posthog plugin's `capture(event: string, ...)` parameter and a Clarity plugin's `event(name: string)` method) were wrongly flagged as conflicting. Provide-key extraction now walks brace depth to only read genuine top-level keys.
+
+### Changed
+
+- **"Search in workspace" lens for 0-reference store members is now scoped, not a bare word search**: for a Pinia store variable/method/getter with a generic name (e.g. `loading`, `error`), the companion `$(search)` lens used to search the literal word across the whole project, surfacing unrelated matches (any other local `loading` ref in unrelated files). It now searches a regex limited to plausible member-access patterns (`.loading`, `{ loading } = ...`), regardless of how the store is aliased (`store.loading`, `agencyStore.loading`, `useAgencyStore().loading`).
+
 ## [0.9.7] - 2026-08-17
 
 ### Changed

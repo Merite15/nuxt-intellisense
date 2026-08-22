@@ -161,4 +161,43 @@ export const useSettingsStore = defineStore('settings', () => ({}));
         assert.ok(searchLens, 'expected a companion "search in workspace" lens');
         assert.deepStrictEqual((searchLens!.command as any).arguments[0], { query: 'orphan', triggerSearch: true });
     });
+
+    it('scopes the "search in workspace" lens of a 0-reference store variable to member-access patterns, not a bare word search', async () => {
+        const storesDir = path.join(tmpDir, 'stores');
+        fs.mkdirSync(storesDir);
+        const storeFile = path.join(storesDir, 'agency.ts');
+        fs.writeFileSync(
+            storeFile,
+            `import { defineStore } from 'pinia';
+export const useAgencyStore = defineStore('agency', () => {
+    const prefix = '/agency'
+    const loading = ref<boolean>(false)
+    return { prefix, loading };
+});
+`
+        );
+
+        await service.scanStoresDirectory(storesDir);
+
+        const doc = makeDocument(storeFile);
+        const lenses = await service.provideCodeLenses(doc);
+
+        const varLens = lenses.find(l => /\$\(symbol-variable\) loading/.test((l.command as any)?.title ?? ''));
+        assert.ok(varLens, 'expected the "loading" variable lens');
+        assert.match((varLens!.command as any).title, /0 reference/);
+
+        const varLine = (varLens!.range as any).start.line;
+        const searchLens = lenses.find(l =>
+            (l.command as any)?.command === 'workbench.action.findInFiles' &&
+            (l.range as any).start.line === varLine
+        );
+        assert.ok(searchLens, 'expected a companion "search in workspace" lens for the variable');
+
+        const args = (searchLens!.command as any).arguments[0];
+        assert.strictEqual(args.isRegex, true);
+        assert.match(args.query, /loading/);
+        // Plain object literal or unrelated declaration should not accidentally satisfy this regex.
+        assert.doesNotMatch('const loading = ref(false)', new RegExp(args.query));
+        assert.match('agencyStore.loading', new RegExp(args.query));
+    });
 });

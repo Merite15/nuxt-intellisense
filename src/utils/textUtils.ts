@@ -92,17 +92,33 @@ export class TextUtils {
      * soit, mieux vaut permettre à l'utilisateur de vérifier lui-même via la
      * recherche globale de VS Code plutôt que de faire confiance aveuglément.
      */
-    static buildSearchInWorkspaceLens(range: vscode.Range, name: string): vscode.CodeLens {
+    /**
+     * `regexQuery`, si fourni, restreint la recherche à des usages plausibles du
+     * membre (accès `.member`, déstructuration `{ member }`) plutôt qu'une
+     * recherche du mot brut — utile pour les noms de variable/méthode génériques
+     * (ex: `loading`, `error`) qui apparaissent ailleurs dans le projet sans
+     * rapport avec ce store/composable précis.
+     */
+    static buildSearchInWorkspaceLens(range: vscode.Range, name: string, regexQuery?: string): vscode.CodeLens {
         return new vscode.CodeLens(range, {
             title: `$(search) Rechercher "${name}" dans le projet`,
             command: 'workbench.action.findInFiles',
             arguments: [
-                {
-                    query: name,
-                    triggerSearch: true
-                }
+                regexQuery
+                    ? { query: regexQuery, isRegex: true, triggerSearch: true }
+                    : { query: name, triggerSearch: true }
             ]
         });
+    }
+
+    /**
+     * Construit une regex de recherche scopée pour un membre de store/composable :
+     * accès par point (`store.member`, `store.value.member`) ou déstructuration
+     * (`const { member } = ...`), afin d'éviter le bruit d'une simple recherche
+     * texte pour des noms courants comme `loading` ou `error`.
+     */
+    static buildMemberSearchRegex(memberName: string): string {
+        return `\\.${memberName}\\b|\\{[^}]*\\b${memberName}\\b[^}]*\\}\\s*=`;
     }
 
     /**

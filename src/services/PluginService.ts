@@ -174,25 +174,163 @@ export class PluginService {
             keys.add(match[1]);
         }
 
-        const provideObjectRegex = /provide\s*:\s*\{([\s\S]*?)\}/g;
-        const keyRegex = /(?:['"`]?([$\w]+)['"`]?\s*:|(\b[$\w]+),)/g;
-        let objectMatch: RegExpExecArray | null;
+        const provideObjectHeaderRegex = /provide\s*:\s*\{/g;
+        let headerMatch: RegExpExecArray | null;
 
-        while ((objectMatch = provideObjectRegex.exec(content)) !== null) {
-            const block = objectMatch[1];
+        while ((headerMatch = provideObjectHeaderRegex.exec(content)) !== null) {
+            const openIndex = headerMatch.index + headerMatch[0].length - 1;
+            const closeIndex = this.findMatchingBraceIndex(content, openIndex);
 
-            keyRegex.lastIndex = 0;
-            let keyMatch: RegExpExecArray | null;
+            if (closeIndex === -1) {
+                continue;
+            }
 
-            while ((keyMatch = keyRegex.exec(block)) !== null) {
-                const key = keyMatch[1] || keyMatch[2];
-                if (key) {
-                    keys.add(key);
+            const block = content.slice(openIndex + 1, closeIndex);
+
+            for (const entry of this.splitTopLevelEntries(block)) {
+                const trimmed = entry.trim();
+
+                if (!trimmed) {
+                    continue;
+                }
+
+                const keyValueMatch = trimmed.match(/^['"`]?([$\w]+)['"`]?\s*:/);
+
+                if (keyValueMatch) {
+                    keys.add(keyValueMatch[1]);
+                } else if (/^[$\w]+$/.test(trimmed)) {
+                    keys.add(trimmed);
                 }
             }
+
+            provideObjectHeaderRegex.lastIndex = closeIndex + 1;
         }
 
         return keys;
+    }
+
+    /**
+     * Trouve l'index de l'accolade fermante correspondant à l'accolade ouvrante
+     * située à `openIndex`, en ignorant les accolades trouvées dans des chaînes,
+     * template literals et commentaires. Retourne -1 si non trouvée.
+     */
+    private findMatchingBraceIndex(content: string, openIndex: number): number {
+        let depth = 0;
+        let i = openIndex;
+
+        while (i < content.length) {
+            const char = content[i];
+
+            if (char === '"' || char === "'" || char === '`') {
+                i = this.skipStringLiteral(content, i);
+                continue;
+            }
+
+            if (char === '/' && content[i + 1] === '/') {
+                const newline = content.indexOf('\n', i);
+                i = newline === -1 ? content.length : newline + 1;
+                continue;
+            }
+
+            if (char === '/' && content[i + 1] === '*') {
+                const end = content.indexOf('*/', i + 2);
+                i = end === -1 ? content.length : end + 2;
+                continue;
+            }
+
+            if (char === '{') {
+                depth++;
+            } else if (char === '}') {
+                depth--;
+                if (depth === 0) {
+                    return i;
+                }
+            }
+
+            i++;
+        }
+
+        return -1;
+    }
+
+    /**
+     * Avance l'index au-delà d'une chaîne (simple/double quote ou template literal),
+     * en gérant les échappements et les interpolations `${...}` imbriquées.
+     */
+    private skipStringLiteral(content: string, startIndex: number): number {
+        const quote = content[startIndex];
+        let i = startIndex + 1;
+
+        while (i < content.length) {
+            const char = content[i];
+
+            if (char === '\\') {
+                i += 2;
+                continue;
+            }
+
+            if (quote === '`' && char === '$' && content[i + 1] === '{') {
+                const closeIndex = this.findMatchingBraceIndex(content, i + 1);
+                i = closeIndex === -1 ? content.length : closeIndex + 1;
+                continue;
+            }
+
+            if (char === quote) {
+                return i + 1;
+            }
+
+            i++;
+        }
+
+        return i;
+    }
+
+    /**
+     * Découpe un bloc d'objet (contenu entre `{` et `}`, exclus) en entrées de
+     * premier niveau, en respectant l'imbrication des accolades/parenthèses/
+     * crochets et les chaînes de caractères.
+     */
+    private splitTopLevelEntries(block: string): string[] {
+        const entries: string[] = [];
+        let depth = 0;
+        let start = 0;
+        let i = 0;
+
+        while (i < block.length) {
+            const char = block[i];
+
+            if (char === '"' || char === "'" || char === '`') {
+                i = this.skipStringLiteral(block, i);
+                continue;
+            }
+
+            if (char === '/' && block[i + 1] === '/') {
+                const newline = block.indexOf('\n', i);
+                i = newline === -1 ? block.length : newline + 1;
+                continue;
+            }
+
+            if (char === '/' && block[i + 1] === '*') {
+                const end = block.indexOf('*/', i + 2);
+                i = end === -1 ? block.length : end + 2;
+                continue;
+            }
+
+            if (char === '{' || char === '(' || char === '[') {
+                depth++;
+            } else if (char === '}' || char === ')' || char === ']') {
+                depth--;
+            } else if (char === ',' && depth === 0) {
+                entries.push(block.slice(start, i));
+                start = i + 1;
+            }
+
+            i++;
+        }
+
+        entries.push(block.slice(start));
+
+        return entries;
     }
 
     private async getCachedDuplicateProvideKeys(): Promise<Map<string, string[]>> {
@@ -294,49 +432,12 @@ export class PluginService {
         let directives: string[] = [];
 
         try {
-            // Classic provide detection
-            const provideRegex = /nuxtApp\.provide\s*\(\s*['\"`]([$\w]+)['\"`]/g;
-
-            let match: RegExpExecArray | null;
-
-            while ((match = provideRegex.exec(pluginContent))) {
-                provides.push(match[1]);
-            }
-
-            // Advanced provide detection
-            const provideObjectRegex = /provide\s*:\s*\{([\s\S]*?)\}/g;
-
-            const keyValueRegex = /^['\"`]?([$\w]+)['\"`]?\s*:/;
-
-            const shorthandRegex = /^[$\w]+$/;
-
-            let provideObjectMatch: RegExpExecArray | null;
-
-            while ((provideObjectMatch = provideObjectRegex.exec(pluginContent))) {
-                const keysBlock = provideObjectMatch[1];
-
-                for (const rawEntry of keysBlock.split(',')) {
-                    const entry = rawEntry.trim();
-
-                    if (!entry) {
-                        continue;
-                    }
-
-                    const keyValueMatch = entry.match(keyValueRegex);
-
-                    if (keyValueMatch) {
-                        provides.push(keyValueMatch[1]);
-                    } else if (shorthandRegex.test(entry)) {
-                        // Shorthand property syntax: `provide: { targetScroll }` === `provide: { targetScroll: targetScroll }`
-                        provides.push(entry);
-                    }
-                }
-            }
-
-            provides = [...new Set(provides)];
+            provides = [...this.extractProvideKeys(pluginContent)];
 
             // Directive detection
             const directiveRegex = /nuxtApp\.vueApp\.directive\s*\(\s*['\"`]([\w-]+)['\"`]/g;
+
+            let match: RegExpExecArray | null;
 
             while ((match = directiveRegex.exec(pluginContent))) {
                 hasDirectives = true;

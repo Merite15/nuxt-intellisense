@@ -139,7 +139,7 @@ export class StoreService {
                             tooltip: `Method of ${storeName} store\nClick to show references`
                         }));
                         if (uniqueReferences.length === 0) {
-                            lenses.push(TextUtils.buildSearchInWorkspaceLens(methodRange, method));
+                            lenses.push(TextUtils.buildSearchInWorkspaceLens(methodRange, method, TextUtils.buildMemberSearchRegex(method)));
                         }
                     }
                 }
@@ -167,7 +167,7 @@ export class StoreService {
                             tooltip: `Variable of ${storeName} store\nClick to show references`
                         }));
                         if (uniqueReferences.length === 0) {
-                            lenses.push(TextUtils.buildSearchInWorkspaceLens(varRange, variable));
+                            lenses.push(TextUtils.buildSearchInWorkspaceLens(varRange, variable, TextUtils.buildMemberSearchRegex(variable)));
                         }
                     }
                 }
@@ -195,7 +195,7 @@ export class StoreService {
                             tooltip: `Getter of ${storeName} store\nClick to show references`
                         }));
                         if (uniqueReferences.length === 0) {
-                            lenses.push(TextUtils.buildSearchInWorkspaceLens(getterRange, getter));
+                            lenses.push(TextUtils.buildSearchInWorkspaceLens(getterRange, getter, TextUtils.buildMemberSearchRegex(getter)));
                         }
                     }
                 }
