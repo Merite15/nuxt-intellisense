@@ -3,7 +3,7 @@
   "license": "MIT",
   "displayName": "Nuxt Intellisense",
   "description": "Enhanced IntelliSense for Nuxt3 projects",
-  "version": "0.9.8",
+  "version": "0.9.9",
   "publisher": "MeriteK",
   "changelog": "CHANGELOG.md",
   "engines": {
@@ -90,6 +90,10 @@
       {
         "command": "nuxt-intellisense.showDocumentation",
         "title": "Show Nuxt Intellisense Documentation"
+      },
+      {
+        "command": "nuxt-intellisense.showStaleProps",
+        "title": "Show Nuxt Component Stale Props"
       },
       {
         "command": "nuxt-intellisense.refreshExplorer",

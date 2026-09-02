@@ -110,6 +110,62 @@ describe('ComponentService (integration)', () => {
         assert.match((mainLens!.command as any).title, /1 reference/);
     });
 
+    it('flags a prop that is declared but no longer used while a parent still passes it', async () => {
+        const componentsDir = path.join(tmpDir, 'components');
+        fs.mkdirSync(componentsDir);
+        const componentFile = path.join(componentsDir, 'Card.vue');
+        fs.writeFileSync(
+            componentFile,
+            `<script setup lang="ts">\n` +
+            `defineProps<{ title: string; legacyId: number }>()\n` +
+            `</script>\n` +
+            `<template><h1>{{ title }}</h1></template>\n`
+        );
+
+        const pagesDir = path.join(tmpDir, 'pages');
+        fs.mkdirSync(pagesDir);
+        fs.writeFileSync(
+            path.join(pagesDir, 'index.vue'),
+            `<template>\n  <Card title="Hi" :legacy-id="3" />\n</template>\n`
+        );
+
+        const doc = makeDocument(componentFile);
+        const lenses = await service.provideCodeLenses(doc);
+
+        const staleLens = lenses.find(l => (l.command as any)?.command === 'nuxt-intellisense.showStaleProps');
+        assert.ok(staleLens, 'expected a stale-prop warning lens');
+        assert.match((staleLens!.command as any).title, /1 prop inutilisée/);
+        const payload = (staleLens!.command as any).arguments[0];
+        assert.strictEqual(payload.length, 1);
+        assert.strictEqual(payload[0].name, 'legacyId');
+        assert.strictEqual(payload[0].locations.length, 1);
+    });
+
+    it('does not flag a prop that is still used in the component', async () => {
+        const componentsDir = path.join(tmpDir, 'components');
+        fs.mkdirSync(componentsDir);
+        const componentFile = path.join(componentsDir, 'Card.vue');
+        fs.writeFileSync(
+            componentFile,
+            `<script setup lang="ts">\n` +
+            `const props = defineProps<{ title: string }>()\n` +
+            `</script>\n` +
+            `<template><h1>{{ props.title }}</h1></template>\n`
+        );
+
+        const pagesDir = path.join(tmpDir, 'pages');
+        fs.mkdirSync(pagesDir);
+        fs.writeFileSync(
+            path.join(pagesDir, 'index.vue'),
+            `<template>\n  <Card title="Hi" />\n</template>\n`
+        );
+
+        const doc = makeDocument(componentFile);
+        const lenses = await service.provideCodeLenses(doc);
+
+        assert.ok(!lenses.some(l => (l.command as any)?.command === 'nuxt-intellisense.showStaleProps'));
+    });
+
     it('offers a "search in workspace" lens next to a 0-reference component, so the user can double-check before deleting it', async () => {
         const componentsDir = path.join(tmpDir, 'components');
         fs.mkdirSync(componentsDir);

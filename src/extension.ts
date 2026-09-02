@@ -54,7 +54,44 @@ export async function activate(context: vscode.ExtensionContext) {
 
     vscode.commands.registerCommand('nuxt-intellisense.showDocumentation', () => {
       vscode.Uri.parse('https://github.com/Merite15/Nuxt-Intellisense#readme')
-    })
+    }),
+
+    vscode.commands.registerCommand(
+      'nuxt-intellisense.showStaleProps',
+      async (props: { name: string; locations: vscode.Location[] }[]) => {
+        if (!props || props.length === 0) {
+          return;
+        }
+
+        const items = props.map(p => ({
+          label: `$(symbol-property) ${p.name}`,
+          description: `${p.locations.length} parent${p.locations.length > 1 ? 's' : ''} la transmet${p.locations.length > 1 ? 'tent' : ''} encore`,
+          prop: p
+        }));
+
+        const picked = await vscode.window.showQuickPick(items, {
+          placeHolder: 'Prop déclarée mais inutilisée — voir les parents qui la passent encore'
+        });
+
+        if (!picked) {
+          return;
+        }
+
+        const locations = picked.prop.locations.map(
+          (l: any) => new vscode.Location(vscode.Uri.file(l.uri.fsPath ?? l.uri.path), new vscode.Range(
+            l.range.start.line, l.range.start.character,
+            l.range.end.line, l.range.end.character
+          ))
+        );
+
+        await vscode.commands.executeCommand(
+          'editor.action.showReferences',
+          locations[0].uri,
+          locations[0].range.start,
+          locations
+        );
+      }
+    )
   ];
 
   context.subscriptions.push(...disposableCommands);

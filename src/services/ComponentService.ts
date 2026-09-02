@@ -21,6 +21,12 @@ interface MetadataCache {
     mtimeMs: number;
 }
 
+interface StalePropInfo {
+    name: string;
+    /** Balises parentes qui transmettent encore cette prop. */
+    locations: vscode.Location[];
+}
+
 export class ComponentService {
     private referenceCache: Map<string, ReferenceCache> = new Map();
     private componentDirsCache: ComponentDirsCache | null = null;
@@ -32,6 +38,7 @@ export class ComponentService {
     private duplicateNamesCache: { names: Map<string, string[]>, timestamp: number } | null = null;
     private duplicateNamesCacheTTL: number = 600000; // 10 minutes, aligné sur le cache des répertoires
     private metadataCache: Map<string, MetadataCache> = new Map();
+    private stalePropsCache: Map<string, { mtimeMs: number, result: StalePropInfo[] }> = new Map();
 
     constructor(
         private nuxtProjectRoot: string
@@ -85,6 +92,10 @@ export class ComponentService {
         // donc on vide tout le cache de références plutôt que de risquer un
         // compteur périmé.
         this.referenceCache.clear();
+
+        // Les props "mortes" dépendent à la fois du composant ET des parents qui le
+        // transmettent : n'importe quel fichier modifié peut invalider le calcul.
+        this.stalePropsCache.clear();
 
         // Le fichier lui-même a pu changer de props/slots.
         this.metadataCache.delete(filePath);
@@ -192,6 +203,28 @@ export class ComponentService {
             if (referenceCount === 0) {
                 lenses.push(TextUtils.buildSearchInWorkspaceLens(range, String(nuxtComponentName)));
             }
+
+            // Props déclarées mais plus utilisées dans le composant, alors qu'un
+            // parent continue de les transmettre : signalées via un unique CodeLens
+            // agrégé (un QuickPick liste chaque prop concernée et ses sites parents).
+            if (referenceCount > 0) {
+                const staleProps = await this.getCachedStaleProps(document, text, references);
+                if (staleProps.length > 0) {
+                    lenses.push(
+                        new vscode.CodeLens(range, {
+                            title: `$(warning) ${staleProps.length} prop${staleProps.length > 1 ? 's' : ''} inutilisée${staleProps.length > 1 ? 's' : ''} mais encore transmise${staleProps.length > 1 ? 's' : ''} par un parent`,
+                            command: 'nuxt-intellisense.showStaleProps',
+                            arguments: [
+                                staleProps.map(p => ({
+                                    name: p.name,
+                                    locations: p.locations
+                                }))
+                            ]
+                        })
+                    );
+                }
+            }
+
             hasAddedLens = true;
         }
 
@@ -617,6 +650,181 @@ export class ComponentService {
         }
 
         return null;
+    }
+
+    /**
+     * Version mise en cache (invalidée par mtime du composant, et vidée dès qu'un
+     * fichier Vue change) de {@link computeStaleProps}.
+     */
+    private async getCachedStaleProps(
+        document: vscode.TextDocument,
+        text: string,
+        references: vscode.Location[]
+    ): Promise<StalePropInfo[]> {
+        let mtimeMs = 0;
+        try {
+            mtimeMs = fs.statSync(document.uri.fsPath).mtimeMs;
+        } catch {
+            /* fichier non enregistré : pas de mtime, on recalcule à chaque fois */
+        }
+
+        const key = document.uri.toString();
+        const cached = this.stalePropsCache.get(key);
+        if (cached && cached.mtimeMs === mtimeMs && mtimeMs !== 0) {
+            return cached.result;
+        }
+
+        const result = await this.computeStaleProps(text, references);
+        this.stalePropsCache.set(key, { mtimeMs, result });
+        return result;
+    }
+
+    /**
+     * Détecte les props déclarées via `defineProps` qui n'apparaissent plus nulle
+     * part dans le composant (ni `<script>`, ni `<template>`) alors qu'au moins un
+     * parent continue de les passer. Analyse purement textuelle : en cas de doute
+     * (déstructuration, `v-bind` avec objet complet, `useAttrs`...) on préfère ne
+     * rien signaler plutôt que de risquer un faux positif.
+     */
+    private async computeStaleProps(
+        text: string,
+        references: vscode.Location[]
+    ): Promise<StalePropInfo[]> {
+        const props = this.extractProps(text);
+        if (props.length === 0 || references.length === 0) {
+            return [];
+        }
+
+        const body = this.stripPropsDeclaration(text);
+
+        const candidates = props.filter(p => !this.isIdentifierUsed(body, p.name));
+        if (candidates.length === 0) {
+            return [];
+        }
+
+        // Contenu des balises parentes (une seule lecture par fichier).
+        const tagTextByFile = new Map<string, string[]>();
+        const tagTexts: { text: string; loc: vscode.Location }[] = [];
+        for (const loc of references) {
+            let lines = tagTextByFile.get(loc.uri.fsPath);
+            if (!lines) {
+                try {
+                    lines = fs.readFileSync(loc.uri.fsPath, 'utf-8').split('\n');
+                } catch {
+                    lines = [];
+                }
+                tagTextByFile.set(loc.uri.fsPath, lines);
+            }
+            const tag = lines.slice(loc.range.start.line, loc.range.end.line + 1).join('\n');
+            tagTexts.push({ text: tag, loc });
+        }
+
+        // Si un parent utilise `v-bind="obj"` (objet entier), impossible de savoir
+        // quelles props il transmet : on n'ose flaguer aucune prop.
+        const hasObjectVBind = tagTexts.some(t => /v-bind\s*=\s*["'{]/.test(t.text));
+        if (hasObjectVBind) {
+            return [];
+        }
+
+        const result: StalePropInfo[] = [];
+        for (const prop of candidates) {
+            const passing = tagTexts
+                .filter(t => this.tagPassesProp(t.text, prop.name))
+                .map(t => t.loc);
+            if (passing.length > 0) {
+                result.push({ name: prop.name, locations: passing });
+            }
+        }
+        return result;
+    }
+
+    /** Un identifiant apparaît-il comme mot entier dans le texte donné ? */
+    private isIdentifierUsed(text: string, name: string): boolean {
+        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const kebab = name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+        if (new RegExp(`\\b${escaped}\\b`).test(text)) {
+            return true;
+        }
+        if (kebab !== name && new RegExp(`\\b${kebab.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(text)) {
+            return true;
+        }
+        return false;
+    }
+
+    /** Une balise parente passe-t-elle explicitement l'attribut/prop `name` ? */
+    private tagPassesProp(tagText: string, name: string): boolean {
+        const kebab = name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+        const names = name === kebab ? [name] : [name, kebab];
+        for (const n of names) {
+            const escaped = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            // `foo=`, `:foo=`, `v-bind:foo=`, ou raccourci booléen `foo` isolé.
+            const re = new RegExp(`(?:\\s)(?::|v-bind:)?${escaped}(?:\\.[\\w-]+)*(?:\\s*=|\\s|/?>)`);
+            if (re.test(tagText)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Retire du contenu la déclaration des props (`defineProps<...>()` /
+     * `defineProps({...})`, l'éventuel wrapper `withDefaults(...)`, la
+     * déstructuration `const { ... } = defineProps` et l'`interface`/`type` de
+     * props référencé en générique) afin que la recherche d'usage ne compte pas la
+     * déclaration elle-même comme une utilisation.
+     */
+    private stripPropsDeclaration(content: string): string {
+        // Neutraliser les `=>` pour ne pas fausser l'équilibrage des chevrons.
+        let result = content.replace(/=>/g, '  ');
+
+        const genericName = /defineProps\s*<\s*([A-Za-z_$][\w$]*)\s*>/.exec(result)?.[1];
+        if (genericName) {
+            for (const prefix of [`interface\\s+${genericName}\\s*`, `type\\s+${genericName}\\s*=\\s*`]) {
+                const m = new RegExp(prefix + '\\{').exec(result);
+                if (m) {
+                    const braceIdx = m.index + m[0].length - 1;
+                    const block = TextUtils.extractBalancedBlock(result, braceIdx);
+                    if (block) {
+                        result = result.slice(0, m.index) + ' '.repeat(m[0].length + block.length - 1) + result.slice(braceIdx + block.length);
+                    }
+                }
+            }
+        }
+
+        const call = /defineProps\s*(<|\()/.exec(result);
+        if (!call) {
+            return result;
+        }
+
+        let start = call.index;
+        const before = result.slice(0, start);
+        const lhs = /(?:const|let|var)\s*(?:\{[^{}]*\}|[A-Za-z_$][\w$]*)\s*=\s*(?:withDefaults\s*\(\s*)?$/.exec(before);
+        if (lhs) {
+            start = lhs.index;
+        }
+
+        const openIdx = call.index + call[0].length - 1;
+        const open = result[openIdx];
+        const close = open === '<' ? '>' : ')';
+        let depth = 0;
+        let end = result.length;
+        for (let i = openIdx; i < result.length; i++) {
+            if (result[i] === open) {
+                depth++;
+            } else if (result[i] === close) {
+                depth--;
+                if (depth === 0) {
+                    end = i + 1;
+                    const rest = result.slice(end).match(/^\s*\([^()]*\)/);
+                    if (open === '<' && rest) {
+                        end += rest[0].length;
+                    }
+                    break;
+                }
+            }
+        }
+
+        return result.slice(0, start) + ' '.repeat(end - start) + result.slice(end);
     }
 
     /**

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.9] - 2026-09-02
+
+### Added
+
+- **Stale prop detection on component CodeLens**: a component using `<script setup>` + `defineProps` now shows a single `$(warning)` lens when one or more declared props are no longer referenced anywhere in the component (neither `<script>` nor `<template>`) while at least one parent still passes them — the typical leftover after removing a feature but forgetting to trim the props. Clicking the lens opens a QuickPick listing each stale prop and its parent call sites (`editor.action.showReferences`). The analysis is purely textual and deliberately conservative: destructured `defineProps`, `v-bind="obj"` object spreads on the parent, `useAttrs`, etc. suppress the warning rather than risk a false positive.
+
 ## [0.9.8] - 2026-08-22
 
 ### Fixed
