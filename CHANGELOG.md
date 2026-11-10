@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0] - 2026-11-10
+
+### Added
+
+- **Component `prefix` / `pathPrefix` from `nuxt.config`**: component names now honour the `components: [{ path, prefix, pathPrefix }]` option of the root or layer `nuxt.config`. With `prefix: 'Staff'`, `PageTeachingUnitHeader.vue` resolves to `<StaffPageTeachingUnitHeader />` (no duplicate if the name already starts with the prefix). Directories declared outside a `components/` folder are also picked up.
+
+### Changed
+
+- **"Search in workspace" lens for 0-reference store members is scoped to the files using the store**, instead of the whole project.
+
+### Fixed
+
+- **Composable member reference count**: duplicate locations are removed (the CodeLens count now matches the peek list) and usages in template attributes (`v-model:foo="item"`, `:prop="item"`) and `{{ item }}` interpolations are now counted.
+- **Test files no longer treated as plugins/composables/middleware**: `test/plugins/*.spec.ts` was reported as a "provide key conflict" with the real plugin. `*.spec.*`, `*.test.*` and `test/`, `tests/`, `__tests__/`, `e2e/` folders are now ignored.
+
+### Security
+
+- Bumped transitive dev dependencies: fast-uri 3.1.9, js-yaml 4.3.2, undici 8.12.4, markdown-it 14.3.3.
+
 ## [0.9.9] - 2026-09-02
 
 ### Added

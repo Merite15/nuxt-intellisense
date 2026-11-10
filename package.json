@@ -3,7 +3,7 @@
   "license": "MIT",
   "displayName": "Nuxt Intellisense",
   "description": "Enhanced IntelliSense for Nuxt3 projects",
-  "version": "0.9.9",
+  "version": "1.0.0",
   "publisher": "MeriteK",
   "changelog": "CHANGELOG.md",
   "engines": {
