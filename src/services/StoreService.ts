@@ -95,6 +95,9 @@ export class StoreService {
 
             let memberDetails = [];
 
+            // Fichiers qui utilisent ce store : seuls candidats pour un usage de ses membres
+            const storeFiles = [...new Set(uniqueReferences.map(r => vscode.workspace.asRelativePath(r.uri, false)))];
+
             // Dans provideCodeLenses, modifiez la partie qui ajoute les CodeLens pour les membres :
             if (storeInfo?.members) {
                 const { methods, variables, getters } = storeInfo.members;
@@ -139,7 +142,7 @@ export class StoreService {
                             tooltip: `Method of ${storeName} store\nClick to show references`
                         }));
                         if (uniqueReferences.length === 0) {
-                            lenses.push(TextUtils.buildSearchInWorkspaceLens(methodRange, method, TextUtils.buildMemberSearchRegex(method)));
+                            lenses.push(TextUtils.buildSearchInWorkspaceLens(methodRange, method, TextUtils.buildMemberSearchRegex(method), storeFiles));
                         }
                     }
                 }
@@ -167,7 +170,7 @@ export class StoreService {
                             tooltip: `Variable of ${storeName} store\nClick to show references`
                         }));
                         if (uniqueReferences.length === 0) {
-                            lenses.push(TextUtils.buildSearchInWorkspaceLens(varRange, variable, TextUtils.buildMemberSearchRegex(variable)));
+                            lenses.push(TextUtils.buildSearchInWorkspaceLens(varRange, variable, TextUtils.buildMemberSearchRegex(variable), storeFiles));
                         }
                     }
                 }
@@ -195,7 +198,7 @@ export class StoreService {
                             tooltip: `Getter of ${storeName} store\nClick to show references`
                         }));
                         if (uniqueReferences.length === 0) {
-                            lenses.push(TextUtils.buildSearchInWorkspaceLens(getterRange, getter, TextUtils.buildMemberSearchRegex(getter)));
+                            lenses.push(TextUtils.buildSearchInWorkspaceLens(getterRange, getter, TextUtils.buildMemberSearchRegex(getter), storeFiles));
                         }
                     }
                 }

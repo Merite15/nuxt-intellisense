@@ -325,6 +325,10 @@ export class ComposableService {
             const files = await vscode.workspace.findFiles(new vscode.RelativePattern(dir, '**/*.{ts,js}'));
 
             for (const file of files) {
+                if (FileUtils.isTestFile(file.fsPath, this.nuxtProjectRoot)) {
+                    continue;
+                }
+
                 let content: string;
                 try {
                     content = fs.readFileSync(file.fsPath, 'utf-8');
@@ -412,6 +416,12 @@ export class ComposableService {
                     this.findItemReferencesInFile(content, uri, item, results);
                 }
             }));
+        }
+
+        // Plusieurs motifs regex peuvent retrouver le même emplacement : le compteur
+        // du CodeLens doit refléter le nombre d'emplacements distincts affichés.
+        for (const [key, refs] of resultsByKey) {
+            resultsByKey.set(key, TextUtils.removeDuplicateReferences(refs));
         }
 
         this.documentMemberReferenceCache.set(cacheKey, { references: resultsByKey, timestamp: now });
@@ -508,12 +518,19 @@ export class ComposableService {
                 // Vérifier que ce n'est pas une déclaration ou déstructuration
                 const beforeMatch = content.substring(Math.max(0, usageMatch.index - 20), usageMatch.index);
 
+                // `:` directement avant = valeur de propriété d'objet / annotation de type.
+                // Un `:` plus loin (ex: `v-model:category-id="item"`, `:prop="item"`) est
+                // un attribut de template : c'est bien un usage.
+                const afterPropertyKey = /[\w$]\s*:\s*$/.test(beforeMatch);
+                // `{` ouvert = déstructuration, sauf l'interpolation de template `{{ item }}`.
+                const insideOpenBrace = /\{[^}]*$/.test(beforeMatch) && !/\{\{[^}]*$/.test(beforeMatch);
+
                 if (!beforeMatch.includes('const ') &&
                     !beforeMatch.includes('let ') &&
                     !beforeMatch.includes('var ') &&
                     !beforeMatch.includes('function ') &&
-                    !beforeMatch.includes(':') && // Éviter les propriétés d'objets
-                    !beforeMatch.includes('{')) { // Éviter les déstructurations
+                    !afterPropertyKey &&
+                    !insideOpenBrace) {
 
                     const start = TextUtils.indexToPosition(content, usageMatch.index);
                     const end = TextUtils.indexToPosition(content, usageMatch.index + item.name.length);

@@ -289,6 +289,10 @@ export class PageMetaValidationService {
             const files = await vscode.workspace.findFiles(new vscode.RelativePattern(dir, '**/*.{ts,js}'));
 
             for (const file of files) {
+                if (FileUtils.isTestFile(file.fsPath, this.nuxtProjectRoot)) {
+                    continue;
+                }
+
                 const base = path.basename(file.fsPath).replace(/\.(ts|js)$/, '');
 
                 // Un middleware .global.ts s'applique automatiquement : il n'est jamais

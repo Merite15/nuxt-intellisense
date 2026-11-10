@@ -38,6 +38,8 @@ export class ComponentService {
     private duplicateNamesCache: { names: Map<string, string[]>, timestamp: number } | null = null;
     private duplicateNamesCacheTTL: number = 600000; // 10 minutes, aligné sur le cache des répertoires
     private metadataCache: Map<string, MetadataCache> = new Map();
+    // Options `components: [{ path, prefix, pathPrefix }]` des nuxt.config, par dossier (chemin en minuscules)
+    private componentDirOptions: Map<string, { prefix?: string; pathPrefix?: boolean }> = new Map();
     private stalePropsCache: Map<string, { mtimeMs: number, result: StalePropInfo[] }> = new Map();
 
     constructor(
@@ -124,13 +126,14 @@ export class ComponentService {
 
         if (!nuxtComponentName) {
             // On ne l'a pas encore dans le cache, le calculer
-            for (const dir of allComponentDirs) {
-                if (document.uri.fsPath.startsWith(dir)) {
-                    nuxtComponentName = this.getNuxtComponentName(document.uri.fsPath, dir);
-                    // Mettre en cache pour une utilisation future
-                    this.componentNameCache.set(document.uri.fsPath, nuxtComponentName);
-                    break;
-                }
+            // Dossier le plus spécifique (un dossier configuré peut être imbriqué dans components/)
+            const dir = allComponentDirs
+                .filter(d => document.uri.fsPath.startsWith(d))
+                .sort((a, b) => b.length - a.length)[0];
+            if (dir) {
+                nuxtComponentName = this.getNuxtComponentName(document.uri.fsPath, dir);
+                // Mettre en cache pour une utilisation future
+                this.componentNameCache.set(document.uri.fsPath, nuxtComponentName);
             }
         } else {
         }
@@ -581,9 +584,17 @@ export class ComponentService {
             return dirs;
         }
 
+        this.componentDirOptions.clear();
+
         const recurse = (dir: string) => {
             try {
                 const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+                // Config Nuxt (racine ou layer) : options `components: [{ path, prefix }]`
+                const configEntry = entries.find(e => e.isFile() && /^nuxt\.config\.(ts|js|mjs|mts)$/.test(e.name));
+                if (configEntry) {
+                    this.loadComponentDirOptions(dir, path.join(dir, configEntry.name), dirs);
+                }
 
                 for (const entry of entries) {
                     const fullPath = path.join(dir, entry.name);
@@ -594,7 +605,7 @@ export class ComponentService {
                     }
 
                     if (entry.isDirectory()) {
-                        if (entry.name === 'components') {
+                        if (entry.name === 'components' && !dirs.some(d => path.resolve(d).toLowerCase() === path.resolve(fullPath).toLowerCase())) {
                             dirs.push(fullPath);
                         }
                         recurse(fullPath);
@@ -610,25 +621,96 @@ export class ComponentService {
     }
 
     private getNuxtComponentName(filePath: string, componentsDir: string): string {
+        const options = this.componentDirOptions.get(path.resolve(componentsDir).toLowerCase());
         let relPath = path.relative(componentsDir, filePath).replace(/\.vue$/, '');
 
-        const parts = relPath.split(path.sep);
+        let parts = relPath.split(path.sep);
 
         if (parts[parts.length - 1].toLowerCase() === 'index') {
             parts.pop();
         }
 
-        const result = parts
-            .filter(Boolean)
-            .map(part =>
-                part
-                    .split('-')
-                    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-                    .join('')
-            )
+        // `pathPrefix: false` : seul le nom du fichier compte, pas les sous-dossiers
+        if (options && options.pathPrefix === false && parts.length > 1) {
+            parts = [parts[parts.length - 1]];
+        }
+
+        const pascal = (part: string) => part
+            .split('-')
+            .map(w => w.charAt(0).toUpperCase() + w.slice(1))
             .join('');
 
+        let result = parts.filter(Boolean).map(pascal).join('');
+
+        // Préfixe de la config `components` (ex: prefix 'Staff' -> StaffPageHeader).
+        // Nuxt ne le duplique pas si le nom commence déjà par ce préfixe.
+        if (options && options.prefix) {
+            const prefix = pascal(options.prefix);
+            if (!result.startsWith(prefix)) {
+                result = prefix + result;
+            }
+        }
+
         return result;
+    }
+
+    /**
+     * Lit la clé `components` d'un nuxt.config (racine ou layer) et enregistre
+     * le préfixe / pathPrefix de chaque dossier déclaré. Analyse par regex.
+     */
+    private loadComponentDirOptions(configDir: string, configFile: string, dirs: string[]): void {
+        let content: string;
+        try {
+            content = fs.readFileSync(configFile, 'utf-8');
+        } catch {
+            return;
+        }
+
+        const keyRegex = /\bcomponents\s*:\s*([\[{])/g;
+        let keyMatch: RegExpExecArray | null;
+
+        while ((keyMatch = keyRegex.exec(content))) {
+            const open = keyMatch[1];
+            const close = open === '[' ? ']' : '}';
+            const start = keyMatch.index + keyMatch[0].length - 1;
+            let depth = 0;
+            let end = -1;
+            for (let i = start; i < content.length; i++) {
+                if (content[i] === open) depth++;
+                else if (content[i] === close && --depth === 0) { end = i; break; }
+            }
+            if (end === -1) continue;
+
+            const block = content.slice(start, end + 1);
+            for (const obj of block.matchAll(/\{[^{}]*\}/g)) {
+                const pathMatch = /\bpath\s*:\s*(['"`])([^'"`]+)\1/.exec(obj[0]);
+                if (!pathMatch) continue;
+
+                const prefixMatch = /\bprefix\s*:\s*(['"`])([^'"`]*)\1/.exec(obj[0]);
+                const pathPrefixMatch = /\bpathPrefix\s*:\s*(true|false)/.exec(obj[0]);
+                const options = {
+                    prefix: prefixMatch ? prefixMatch[2] : undefined,
+                    pathPrefix: pathPrefixMatch ? pathPrefixMatch[1] === 'true' : undefined
+                };
+
+                let raw = pathMatch[2].replace(/[\\/]\*.*$/, '');
+                const aliasMatch = /^(?:~~|@@|~|@)[\\/]?/.exec(raw);
+                raw = aliasMatch ? raw.slice(aliasMatch[0].length) : raw.replace(/^\.[\\/]/, '');
+
+                for (const base of [configDir, path.join(configDir, 'app')]) {
+                    const resolved = path.resolve(base, raw);
+                    try {
+                        if (!fs.statSync(resolved).isDirectory()) continue;
+                    } catch {
+                        continue;
+                    }
+                    this.componentDirOptions.set(resolved.toLowerCase(), options);
+                    if (!dirs.some(d => path.resolve(d).toLowerCase() === resolved.toLowerCase())) {
+                        dirs.push(resolved);
+                    }
+                }
+            }
+        }
     }
 
     /**

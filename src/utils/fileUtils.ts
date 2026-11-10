@@ -63,7 +63,8 @@ export class FileUtils {
                                 dirs.push(fullPath);
                             }
 
-                            if (entry.name !== 'node_modules' && entry.name !== '.nuxt' && entry.name !== '.output') {
+                            // Ne pas descendre dans les dossiers de test (test/plugins, tests/composables...)
+                            if (entry.name !== 'node_modules' && entry.name !== '.nuxt' && entry.name !== '.output' && !FileUtils.TEST_DIR_NAMES.includes(entry.name)) {
                                 recurse(fullPath); // continuer la récursion
                             }
                         }
@@ -78,6 +79,22 @@ export class FileUtils {
 
         return dirs;
     }
+
+    /**
+     * Fichier de test (`*.spec.ts`, `*.test.js`) ou situé dans un dossier de test
+     * (`test/`, `tests/`, `__tests__/`, `e2e/`). Un `test/plugins/foo.spec.ts` n'est
+     * PAS un plugin Nuxt : il ne doit pas compter comme tel (conflits, etc.).
+     */
+    static isTestFile(fsPath: string, projectRoot?: string): boolean {
+        if (/\.(spec|test)\.[cm]?[jt]sx?$/.test(fsPath)) {
+            return true;
+        }
+        // Relatif à la racine : un projet situé lui-même dans un dossier « test » ne doit pas être exclu
+        const rel = projectRoot ? path.relative(projectRoot, fsPath) : fsPath;
+        return rel.split(/[\\/]/).some(seg => FileUtils.TEST_DIR_NAMES.includes(seg));
+    }
+
+    private static readonly TEST_DIR_NAMES = ['test', 'tests', '__tests__', 'e2e'];
 
     /**
      * Check if a file should be skipped during search

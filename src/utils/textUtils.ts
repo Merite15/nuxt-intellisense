@@ -99,15 +99,21 @@ export class TextUtils {
      * (ex: `loading`, `error`) qui apparaissent ailleurs dans le projet sans
      * rapport avec ce store/composable précis.
      */
-    static buildSearchInWorkspaceLens(range: vscode.Range, name: string, regexQuery?: string): vscode.CodeLens {
+    static buildSearchInWorkspaceLens(range: vscode.Range, name: string, regexQuery?: string, filesToInclude?: string[]): vscode.CodeLens {
+        const scoped = !!filesToInclude && filesToInclude.length > 0;
+        const args: Record<string, unknown> = regexQuery
+            ? { query: regexQuery, isRegex: true, triggerSearch: true }
+            : { query: name, triggerSearch: true };
+        if (scoped) {
+            // Restreint la recherche aux fichiers qui utilisent réellement le store
+            args.filesToInclude = filesToInclude!.join(',');
+        }
         return new vscode.CodeLens(range, {
-            title: `$(search) Rechercher "${name}" dans le projet`,
+            title: scoped
+                ? `$(search) Rechercher "${name}" dans les ${filesToInclude!.length} fichier${filesToInclude!.length > 1 ? 's' : ''} utilisant ce store`
+                : `$(search) Rechercher "${name}" dans le projet`,
             command: 'workbench.action.findInFiles',
-            arguments: [
-                regexQuery
-                    ? { query: regexQuery, isRegex: true, triggerSearch: true }
-                    : { query: name, triggerSearch: true }
-            ]
+            arguments: [args]
         });
     }
 

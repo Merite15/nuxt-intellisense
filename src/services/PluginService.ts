@@ -355,6 +355,11 @@ export class PluginService {
             const files = await vscode.workspace.findFiles(new vscode.RelativePattern(dir, '**/*.{ts,js}'));
 
             for (const file of files) {
+                // Un fichier de test (test/plugins/x.spec.ts) n'est pas un vrai plugin
+                if (FileUtils.isTestFile(file.fsPath, this.nuxtProjectRoot)) {
+                    continue;
+                }
+
                 let content: string;
                 try {
                     content = fs.readFileSync(file.fsPath, 'utf-8');
