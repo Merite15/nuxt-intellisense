@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.1] - 2026-11-11
+
+### Fixed
+
+- **Components inside a layer named like an ignored directory**: a layer such as `layers/shared` (or `layers/config`, `layers/utils`…) was skipped when discovering `components/` folders because its name matches `nuxt-intellisense.ignoredDirectories`, so the component CodeLens displayed `0 reference | undefined`. Direct children of `layers/` are no longer treated as ignored (`node_modules`, `.nuxt`, `.output` and `.git` still are).
+
 ## [1.0.0] - 2026-11-10
 
 ### Added

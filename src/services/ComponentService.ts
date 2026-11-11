@@ -554,7 +554,16 @@ export class ComponentService {
         const pathSegments = fullPath.split(path.sep);
 
         // Vérifier chaque segment du chemin
-        for (const segment of pathSegments) {
+        for (let i = 0; i < pathSegments.length; i++) {
+            const segment = pathSegments[i];
+
+            // Un layer (enfant direct de `layers/`) n'est jamais ignoré, même s'il
+            // porte le nom d'un dossier ignoré (ex: layers/shared, layers/config)
+            const isLayerRoot = i > 0 && pathSegments[i - 1] === 'layers';
+            if (isLayerRoot && !['node_modules', '.nuxt', '.output', '.git'].includes(segment)) {
+                continue;
+            }
+
             // Si un segment du chemin correspond à un dossier ignoré
             if (baseIgnoredDirs.has(segment)) {
                 return true;
